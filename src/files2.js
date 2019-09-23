@@ -351,6 +351,7 @@ FOAM_FILES([
   { name: "foam/box/ForwardedMessage" },
   { name: "foam/box/ForwardBox" },
   { name: "foam/box/ForwardingBox" },
+  { name: "foam/box/SessionReplyBox" },
   { name: "foam/box/SessionClientBox" },
 
   { name: "foam/swift/refines/Stub", flags: ['swift'] },
