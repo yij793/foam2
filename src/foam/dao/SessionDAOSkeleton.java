@@ -42,6 +42,7 @@ public class SessionDAOSkeleton
         if ( obj != null ) {
           FObject oldObj = getDelegate().find(obj);
           if ( oldObj != null ) {
+            oldObj = oldObj.fclone();
             rpc.getArgs()[1] = oldObj.fclone().copyFrom(obj);
           }
         }
