@@ -237,6 +237,7 @@ foam.CLASS({
     },
     {
       class: 'Object',
+      // TODO: rename to wizardConfig; wizardlet config is the property above
       name: 'wizardletConfig',
       documentation: `
         Configuration placed on top level capabilities defining various configuration options supported by client capability wizards.
@@ -390,8 +391,7 @@ foam.CLASS({
             var cap = (Capability) capabilityDAO.find(capId);
             if ( cap == null || ! cap.getEnabled() ) continue;
             
-            X subjectContext = x.put("subject", subject);
-            UserCapabilityJunction prereqUcj = crunchService.getJunctionForSubject(subjectContext, capId, subject);
+            UserCapabilityJunction prereqUcj = crunchService.getJunctionForSubject(x, capId, subject);
 
             prereqChainedStatus = getPrereqChainedStatus(x, ucj, prereqUcj);
             if ( prereqChainedStatus == CapabilityJunctionStatus.ACTION_REQUIRED ) return CapabilityJunctionStatus.ACTION_REQUIRED;
@@ -460,9 +460,17 @@ foam.RELATIONSHIP({
   forwardName: 'capabilities',
   inverseName: 'users',
   sourceProperty: {
-    section: 'systemInformation',
+    section: 'capabilities',
     updateVisibility: 'RO'
   }
+});
+
+
+foam.CLASS({
+  package: 'foam.nanos.crunch',
+  name: 'CRUNCHUserRefinement',
+  refines: 'foam.nanos.auth.User',
+  sections: [{ name: 'capabilities' }]
 });
 
 
