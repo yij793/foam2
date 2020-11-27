@@ -200,7 +200,6 @@ foam.CLASS({
     {
       class: 'foam.mlang.predicate.PredicateProperty',
       name: 'capabilityVisibilityPredicate',
-      networkTransient: true,
       javaFactory: 'return foam.mlang.MLang.TRUE;',
       documentation: 'Predicate of the visibility for capabilities in the capability store/keyword sections'
     },
