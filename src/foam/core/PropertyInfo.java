@@ -21,10 +21,12 @@ public interface PropertyInfo
   extends Axiom, Comparator, Expr, SQLStatement, Validator, Hasher, Signer, Comparable, ClassInfoAware
 {
 
+  public boolean getExternalTransient();
   public boolean getNetworkTransient();
   public boolean getReadPermissionRequired();
   public boolean getWritePermissionRequired();
   public boolean getStorageTransient();
+  public boolean getStorageOptional();
   public boolean getXMLAttribute();
   public boolean getXMLTextNode();
   public boolean getRequired();
@@ -63,4 +65,5 @@ public interface PropertyInfo
   public boolean containsDeletablePII();
   public void validateObj(foam.core.X x, foam.core.FObject obj);
   public void fromCSVLabelMapping(java.util.Map<String, foam.lib.csv.FromCSVSetter> map);
+  public boolean getSheetsOutput();
 }

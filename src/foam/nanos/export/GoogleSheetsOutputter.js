@@ -7,113 +7,114 @@
 foam.CLASS({
   package: 'foam.nanos.export',
   name: 'GoogleSheetsOutputter',
+  extends: 'foam.nanos.column.TableColumnOutputter',
   requires: [
-    'foam.nanos.export.GoogleSheetsPropertyMetadata'
+    'foam.nanos.column.ColumnConfigToPropertyConverter',
+    'foam.nanos.export.GoogleSheetsPropertyMetadata',
   ],
   methods: [
     {
-      name: 'getColumnMethadata',
+      name: 'getColumnMetadata',
       type: 'foam.nanos.export.GoogleSheetsPropertyMetadata[]',
-      code: function(cls, propsName) {
+      code: async function(x, cls, propNames) {
         var metadata = [];
         var props = [];
-        if ( ! propsName ) {
+        if ( ! propNames ) {
           props = cls.getAxiomsByClass(foam.core.Property);
+          propNames = props.map(p => p.name);
         } else {
-          for ( var i = 0; i < propsName.length ; i++ ) {
-            props.push(cls.getAxiomByName(propsName[i]));
+          var columnConfig = x.columnConfigToPropertyConverter;
+          for ( var i = 0 ; i < propNames.length ; i++ ) {
+            props.push(await columnConfig.returnProperty(cls, propNames[i]));
           }
         }
         
         for ( var i = 0 ; i < props.length ; i++ ) {
-          if ( props[i].networkTransient )
-            continue;
           if ( props[i].cls_.id === "foam.core.Action" )
             continue;
-          var cellType = 'STRING';
-          var pattern = '';
-          if ( props[i].cls_.id === "foam.core.UnitValue" ) {
-            cellType = 'CURRENCY';
-            pattern = '\"$\"#0.00\" CAD\"';
-          } else if ( props[i].cls_.id === 'foam.core.Date' ) {
-            cellType = 'DATE';
-            pattern = 'yyyy-mm-dd';
-          } else if ( props[i].cls_.id === 'foam.core.DateTime' ) {
-            cellType = 'DATE_TIME';
-          } else if ( props[i].cls_.id === 'foam.core.Time' ) {
-            cellType = 'TIME';
-          }
-
-          var m = this.GoogleSheetsPropertyMetadata.create({
-            columnName: props[i].name,
-            columnLabel: props[i].label,
-            columnWidth: props[i].tableWidth ? props[i].tableWidth : 0,
-            cellType: cellType,
-            pattern: pattern
-          });
           
-          metadata.push(m);
+          metadata.push(this.returnMetadataForProperty(x, cls, props[i], propNames[i]));
         }
         return metadata;
       }
     },
     {
-      name: 'getAllPropertyNames',
+      name: 'outputStringForProperties',
       type: 'StringArray',
-      code: function(cls) {
-        var props = cls.getAxiomsByClass(foam.core.Property);
-        var propNames = [];
-        for ( var i = 0 ; i < props.length ; i++ ) {
-          if ( ! props[i].networkTransient )
-            propNames.push(props[i].name);
-        }
-        return propNames;
+      code: async function(x, cls, obj, columnMetadata, lengthOfPrimaryPropsRequested) {
+        var values = [];
+        var columnConfig = x.columnConfigToPropertyConverter;
+
+        var props = columnConfig.returnProperties(cls, columnMetadata.map(m => m.propName));
+        values.push(await this.arrayOfValuesToArrayOfStrings(x, obj, props, lengthOfPrimaryPropsRequested));
+        return values;
       }
     },
     {
-      name: 'outputObjectForProperties',
-      type: 'StringArray',
-      code: async function(obj, columnMethadata) {
-        var propValues = [];
-        for (var i = 0 ; i < columnMethadata.length ; i++ ) {
-          if ( obj[columnMethadata[i].columnName] ) {
-            if ( columnMethadata[i].cellType === 'CURRENCY' ) {
-              propValues.push(( obj[columnMethadata[i].columnName] / 100 ).toString());
-              columnMethadata[i].perValuePatternSpecificValues.push(obj.destinationCurrency);
-            }
-            else if ( columnMethadata[i].cellType === 'DATE' )
-              propValues.push(obj[columnMethadata[i].columnName].toISOString().substring(0, 10));
-            else if ( columnMethadata[i].cellType === 'DATE_TIME' ) {
-              propValues.push(obj[columnMethadata[i].columnName].toString().substring(0, 24));
-              columnMethadata[i].perValuePatternSpecificValues.push(obj[columnMethadata[i].columnName].toString().substring(24));
-            }
-            else if ( columnMethadata[i].cellType === 'TIME' ) {
-              propValues.push(obj[columnMethadata[i].columnName].toString().substring(0, 8));
-              columnMethadata[i].perValuePatternSpecificValues.push(obj[columnMethadata[i].columnName].toString().substring(8));
-            }
-            else if ( obj[columnMethadata[i].columnName].toSummary ) {
-              if ( obj[columnMethadata[i].columnName].toSummary() instanceof Promise )
-                propValues.push(await obj[columnMethadata[i].columnName].toSummary());
-              else
-                propValues.push(obj[columnMethadata[i].columnName].toSummary());
-            } else
-              propValues.push(obj[columnMethadata[i].columnName].toString());            
+      name: 'returnMetadataForProperty',
+      code: function(x, of, prop, propName) {
+        var columnConfig = x.columnConfigToPropertyConverter;
+          //to constants?
+          var cellType = '';
+          var pattern = '';
+          var unitProp;
+          if ( foam.core.UnitValue.isInstance(prop) ) {
+            cellType = 'CURRENCY';
+            pattern = '\"$\"#0.00\" CAD\"';
+            if ( prop.unitPropName )
+              unitProp = of.getAxiomByName(prop.unitPropName).name;
+          } else if ( foam.core.Date.isInstance(prop) ) {
+            cellType = 'DATE';
+            pattern = 'yyyy-mm-dd';
+          } else if ( foam.core.DateTime.isInstance(prop) ) {
+            cellType = 'DATE_TIME';
+            pattern = 'ddd mmm d yyyy hh/mm/ss';
+          } else if ( foam.core.Time.isInstance(prop) ) {
+            cellType = 'TIME';
+            pattern = 'hh/mm/ss';
+          }  else if ( foam.core.Enum.isInstance(prop) || foam.core.AbstractEnum.isInstance(prop) ) {
+            cellType = "ENUM";
+          } else if ( foam.core.Int.isInstance(prop) || foam.core.Float.isInstance(prop) || foam.core.Long.isInstance(prop) || foam.core.Double.isInstance(prop) ) {
+            cellType = 'NUMBER';
+          }  else if ( foam.core.Boolean.isInstance(prop) ) {
+            cellType = 'BOOLEAN';
+          } else if ( foam.core.String.isInstance(prop) ) {
+            cellType = 'STRING';
+          } else if ( foam.core.StringArray.isInstance(prop) || foam.core.Array.isInstance(prop) ) {
+            cellType = 'ARRAY';
+          } 
+
+          return this.GoogleSheetsPropertyMetadata.create({
+            columnName: prop.name,
+            columnLabel: columnConfig.returnColumnHeader(of, propName),
+            columnWidth: prop.tableWidth ? prop.tableWidth : 0,
+            cellType: cellType,
+            pattern: pattern,
+            propName: propName,
+            prop: prop,
+            unitPropName: unitProp
+          });
+      }
+    },
+    {
+      name: 'setUnitValueMetadata',
+      code: function(metadata, propNames, stringArray) {
+        for ( var i = 0; i < metadata.length; i++ ) {
+          if ( foam.core.UnitValue.isInstance(metadata[i].prop) ) {
+            var indexOfUnitProp = propNames.indexOf(metadata[i].unitPropName);
+            metadata[i].perValuePatternSpecificValues = stringArray.slice(1).map(a => a[indexOfUnitProp]);
           }
-          else
-            propValues.push('');
         }
-        return propValues;
       }
     },
     {
-      name: 'outputArray',
-      type: 'Array',
-      code: async function(arr, props) {
-        var valuesArray = [];
-        for ( var i = 0 ; i < arr.length ; i++ ) {
-          valuesArray.push(await this.outputObjectForProperties(arr[i], props));
+      name: 'setUnitValueMetadataForObj',
+      code: function(metadata, obj) {
+        for ( var i = 0; i < metadata.length; i++ ) {
+          if ( foam.core.UnitValue.isInstance(metadata[i].prop) ) {
+            metadata[i].perValuePatternSpecificValues = [ obj[metadata[i].unitPropName].toString() ];
+          }
         }
-        return valuesArray;
       }
     }
   ]

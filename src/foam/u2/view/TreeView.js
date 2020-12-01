@@ -47,7 +47,7 @@ foam.CLASS({
       font-weight: normal;
       display: inline-block;
       color: #9BA1A6;
-      font-family: 'IBM Plex Sans', sans-serif;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 14px;
       font-weight: normal;
     }
@@ -147,7 +147,7 @@ foam.CLASS({
       if ( self.showRootOnSearch )
         self.showRootOnSearch.set(self.showRootOnSearch.get() || self.doesThisIncludeSearch);
 
-      this.data[self.relationship.forwardName].select().then(function(val){
+      this.data[self.relationship.forwardName].select().then(function(val) {
         self.hasChildren = val.array.length > 0;
         self.subMenus    = val.array;
       });
@@ -225,6 +225,7 @@ foam.CLASS({
               addClass(self.myClass('label')).
               call(this.formatter, [self.data]).
               start('span').
+              addClass('toggle-icon').
               show(this.hasChildren$).
               style({
                 'visibility':     'visible',
@@ -249,7 +250,7 @@ foam.CLASS({
                 query:            controlledSearchSlot,
                 onClickAddOn:     self.onClickAddOn,
                 level:            self.level + 1
-              }, self));
+              }, self)).addClass('child-menu');
             });
           })).
         end();
@@ -347,6 +348,7 @@ foam.CLASS({
   css: `
     ^ {
       padding-top: 10px;
+      overflow-y: scroll;
     }
   `,
 

@@ -3,7 +3,6 @@
  * Copyright 2017,2018 The FOAM Authors. All Rights Reserved.
  * http://www.apache.org/licenses/LICENSE-2.0
  */
-
 foam.INTERFACE({
   package: 'foam.lib.csv',
   name: 'FromCSVSetter',
@@ -238,11 +237,12 @@ foam.CLASS({
       expression: function(validationPredicates) {
         return validationPredicates
           .map((vp) => {
-            return `
-              if ( ! ${foam.java.asJavaValue(vp.predicate)}.f(obj) ) {
-                throw new IllegalStateException(${foam.java.asJavaValue(vp.errorString)});
-              }
-            `;
+            var exception = vp.errorMessage ?
+              `throw new IllegalStateException(((${this.forClass_}) obj).${vp.errorMessage});` :
+              `throw new IllegalStateException(${foam.java.asJavaValue(vp.errorString)});`
+            return `if ( ! ${foam.java.asJavaValue(vp.predicate)}.f(obj) ) {
+              ${exception}
+            }`;
           })
           .join('');
       }
@@ -297,9 +297,11 @@ foam.CLASS({
         csvParser:               this.javaCSVParser,
         extends:                 this.javaInfoType,
         networkTransient:        this.networkTransient,
+        externalTransient:       this.externalTransient,
         readPermissionRequired:  this.readPermissionRequired,
         writePermissionRequired: this.writePermissionRequired,
         storageTransient:        this.storageTransient,
+        storageOptional:         this.storageOptional,
         xmlAttribute:            this.xmlAttribute,
         xmlTextNode:             this.xmlTextNode,
         sqlType:                 this.sqlType,
@@ -310,7 +312,8 @@ foam.CLASS({
         validateObj:             this.javaValidateObj,
         toCSV:                   this.javaToCSV,
         toCSVLabel:              this.javaToCSVLabel,
-        fromCSVLabelMapping:     this.javaFromCSVLabelMapping
+        fromCSVLabelMapping:     this.javaFromCSVLabelMapping,
+        sheetsOutput:            this.sheetsOutput
       });
     },
 
@@ -493,6 +496,7 @@ foam.LIB({
   flags: ['java'],
   methods: [
     function buildJavaClass(cls) {
+      // TODO Generate getX() and setX() if contextAware
       cls = cls || foam.java.Class.create();
 
       cls.name          = this.model_.name;
@@ -501,14 +505,12 @@ foam.LIB({
       cls.abstract      = this.model_.abstract;
       cls.documentation = this.model_.documentation;
 
-      if ( this.model_.name !== 'AbstractFObject' ) {
-        // if not AbstractFObject either extend AbstractFObject or use provided extends property
-        cls.extends = this.model_.extends === 'FObject' ?
-          'foam.core.AbstractFObject' : this.model_.extends;
-      } else {
-        // if AbstractFObject we implement FObject
-        cls.implements = [ 'foam.core.FObject' ];
-      }
+      // javaExtends - extends only for java
+      cls.extends = this.model_.extends === 'FObject' ?
+        undefined : this.model_.extends;
+
+      if ( this.model_.javaExtends )
+        cls.extends = this.model_.javaExtends;
 
       cls.fields.push(foam.java.ClassInfo.create({ id: this.id }));
 
@@ -547,23 +549,123 @@ foam.LIB({
           return foam.java.Field.create({ name: p.name, type: p.javaType });
         });
 
-      if ( this.model_.name !== 'AbstractFObject' ) {
-        // if not AbstractFObject add beforeFreeze method
-        var properties = this.getAxiomsByClass(foam.core.Property).
-        filter(flagFilter).
-        filter(function(p) { return !! p.javaType && p.javaInfoType && p.generateJava; }).
-        filter(function(p) { return p.javaFactory; });
-        if ( properties.length > 0 ) {
+      var properties = this.getAxiomsByClass(foam.core.Property)
+        .filter(flagFilter)
+        .filter(p => !! p.javaType && p.javaInfoType && p.generateJava)
+        .filter(p => p.javaFactory);
+
+      if ( properties.length > 0 ) {
+        cls.method({
+          visibility: 'public',
+          type: 'void',
+          name: 'beforeFreeze',
+          body: (this.model_.extends === 'FObject' ? '' : 'super.beforeFreeze();\n') +
+            properties.map(p => `get${foam.String.capitalize(p.name)}();`)
+              .join('\n')
+        });
+      }
+
+      // If model doesn't explicitly extend anything, inject old AbstractFObject methods
+      if ( this.model_.extends === 'FObject' ) {
+        cls.field({
+          name: "x_",
+          visibility: 'protected',
+          static: false,
+          final: false,
+          type: 'foam.core.X',
+          initializer: "foam.core.EmptyX.instance()"
+        });
+
+        cls.method({
+          name: 'getX',
+          type: 'foam.core.X',
+          visibility: 'public',
+          body: 'return x_;'
+        });
+
+        cls.method({
+          name: 'setX',
+          type: 'void',
+          visibility: 'public',
+          args: [
+            {
+              name: 'x',
+              type: 'foam.core.X'
+            }
+          ],
+          body: 'x_ = x;'
+        });
+
+        // Generate Freeze
+        cls.field({
+          name: "__frozen__",
+          visibility: 'protected',
+          static: false,
+          final: false,
+          type: 'boolean',
+          initializer: "false"
+        });
+
+        if ( ! this.hasOwnAxiom('freeze') ) {
           cls.method({
+            name: 'freeze',
+            type: 'foam.core.FObject',
             visibility: 'public',
-            type: 'void',
-            name: 'beforeFreeze',
-            body: 'super.beforeFreeze();\n' + properties.
-              map(function(p) {
-                return `get${foam.String.capitalize(p.name)}();`
-              }).join('\n')
+            body: `
+              beforeFreeze();
+              __frozen__ = true;
+              return this;
+            `
           });
         }
+
+        if ( ! this.hasOwnAxiom('isFrozen') ) {
+          cls.method({
+            name: 'isFrozen',
+            type: 'boolean',
+            visibility: 'public',
+            body: `
+              return __frozen__;
+            `
+          });
+        }
+
+        // Generate Extras if they don't exist in the model
+        if ( ! this.hasOwnAxiom('toString') ) {
+          cls.method({
+            name: 'toString',
+            type: 'String',
+            visibility: 'public',
+            body: `
+              StringBuilder sb = new StringBuilder();
+              append(sb);
+              return sb.toString();
+            `
+          });
+        }
+
+        if ( ! this.hasOwnAxiom('equals') ) {
+          cls.method({
+            name: 'equals',
+            type: 'boolean',
+            visibility: 'public',
+            args: [
+              {
+                name: 'o',
+                type: 'Object'
+              }
+            ],
+            body: `
+              return compareTo(o) == 0;
+            `
+          });
+        }
+
+        // If model doesn't already implement FObject, implement it
+        if ( ! cls.implements )
+          cls.implements = [ 'foam.core.FObject' ];
+        else if ( ! ( cls.implements.includes('foam.core.FObject') || cls.implements.includes('foam.core.FObject') ) )
+          cls.implements.push('foam.core.FObject');
       }
 
       if ( this.hasOwnAxiom('id') ) {
@@ -579,38 +681,41 @@ foam.LIB({
       if ( cls.name ) {
         var props = cls.allProperties;
 
-        // No-arg constructor
-        cls.method({
-          visibility: 'public',
-          name: cls.name,
-          type: '',
-          body: ''
-        });
+        if ( ! this.model_.hasOwnProperty('javaGenerateDefaultConstructor') ) {
+          this.model_.javaGenerateDefaultConstructor = true;
+        }
 
-        // Context-oriented constructor
-        cls.method({
-          visibility: 'public',
-          name: cls.name,
-          type: '',
-          args: [{ type: 'foam.core.X', name: 'x' }],
-          body: 'setX(x);'
-        });
-
-        if ( cls.name != 'AbstractFObject' ) {
+        if ( this.model_.javaGenerateDefaultConstructor ) {
+          // No-arg constructor
           cls.method({
             visibility: 'public',
-            name: 'hashCode',
-            type: 'int',
-            body: 
-              ['int hash = 1'].concat(props.map(function(f) {
-                return 'hash += hash * 31 + foam.util.SafetyUtil.hashCode('+f.name+ '_' +')';
-              })).join(';\n') + ';\n'
-              +'return hash;\n'
+            name: cls.name,
+            type: '',
+            body: ''
+          });
+
+          // Context-oriented constructor
+          cls.method({
+            visibility: 'public',
+            name: cls.name,
+            type: '',
+            args: [{ type: 'foam.core.X', name: 'x' }],
+            body: 'setX(x);'
           });
         }
 
-        if ( cls.name != 'AbstractFObject' &&
-             ! this.hasOwnAxiom('compareTo') ) {
+        cls.method({
+          visibility: 'public',
+          name: 'hashCode',
+          type: 'int',
+          body:
+            ['int hash = 1'].concat(props.map(function(f) {
+              return 'hash += hash * 31 + foam.util.SafetyUtil.hashCode('+f.name+ '_' +')';
+            })).join(';\n') + ';\n'
+            +'return hash;\n'
+        });
+
+        if ( ! this.hasOwnAxiom('compareTo') ) {
           cls.method({
             visibility: 'public',
             name: 'compareTo',
@@ -632,7 +737,12 @@ foam.LIB({
           });
         }
 
-        if ( props.length && props.length < 7 ) {
+        // If the model doesn't explicitly define a value, then compute based
+        // on number of properties.
+        if ( ! this.model_.hasOwnProperty('javaGenerateConvenienceConstructor') )
+          this.model_.javaGenerateConvenienceConstructor = props.length && props.length < 7;
+
+        if ( this.model_.javaGenerateConvenienceConstructor ) {
           // All-property constructor
           cls.method({
             visibility: 'public',
@@ -699,6 +809,7 @@ foam.CLASS({
       name: 'abstract',
       value: false
     },
+    { class: 'String', name: 'visibility', value: 'public' },
     {
       class: 'StringArray',
       name: 'javaThrows'
@@ -775,7 +886,7 @@ foam.CLASS({
       cls.method({
         name: this.name,
         type: this.javaType || 'void',
-        visibility: 'public',
+        visibility: this.visibility,
         static: this.isStatic(),
         abstract: this.abstract,
         final: this.final,
@@ -791,7 +902,6 @@ foam.CLASS({
         }),
         body: this.javaCode ? this.javaCode : ''
       });
-
 
       var initializerString = this.buildMethodInfoInitializer(cls);
 
@@ -1226,10 +1336,11 @@ foam.CLASS({
         cls.buildJavaClass = function(cls) {
           cls = cls || foam.java.Enum.create();
 
-          cls.name    = this.name;
-          cls.package = this.package;
-          cls.extends = this.extends;
-          cls.values  = this.VALUES;
+          cls.name       = this.name;
+          cls.package    = this.package;
+          cls.extends    = this.extends;
+          cls.values     = this.VALUES;
+          cls.implements = [ 'foam.core.FEnum' ];
 
           // TODO: needed for now because Enums don't extend FObject
           // but a better solution would be to remove setters from
@@ -1240,7 +1351,6 @@ foam.CLASS({
             type: 'void',
             body: `/* nop */`
           });
-
 
           var flagFilter = foam.util.flagFilter(['java']);
           var axioms = this.getAxioms().filter(flagFilter);
@@ -1273,7 +1383,7 @@ foam.CLASS({
 
           cls.declarations = this.VALUES.map(function(v) {
             return `${v.name}(${properties.map(p => foam.java.asJavaValue(v[p])).join(', ')})`;
-          }).join(', ');
+          }).join(',\n  ');
 
           cls.method({
             name: 'labels',
@@ -1296,7 +1406,7 @@ return new String[] {
             body: `
 switch (ordinal) {
 ${this.VALUES.map(v => `\tcase ${v.ordinal}: return ${cls.name}.${v.name};`).join('\n')}
-    default: return null;
+  default: return null;
 }`
           });
 
@@ -1309,7 +1419,7 @@ ${this.VALUES.map(v => `\tcase ${v.ordinal}: return ${cls.name}.${v.name};`).joi
             body: `
 switch (label) {
 ${this.VALUES.map(v => `\tcase "${v.label}": return ${cls.name}.${v.name};`).join('\n')}
-    default: return null;
+  default: return null;
 }`
           });
 
@@ -1981,6 +2091,16 @@ foam.CLASS({
   flags: ['java'],
 
   properties: [
+     {
+      class: 'Boolean',
+      name: 'javaGenerateDefaultConstructor',
+      value: true
+    },
+    {
+      class: 'Boolean',
+      name: 'javaGenerateConvenienceConstructor',
+      value: true
+    },
     {
       class: 'AxiomArray',
       of: 'foam.java.JavaImport',
@@ -2134,15 +2254,15 @@ foam.CLASS({
       name: 'javaCode',
       getter: function() {
         return `
-try {
-  synchronized ( getDelegate() ) {
-    while ( ! getDelegate().isPropertySet("${this.property}") ) getDelegate().wait();
-  }
-} catch (Exception e) {
-  throw new RuntimeException(e);
-}
-${this.javaType != 'void' ? 'return ' : ''}getDelegate()
-    .${this.name}(${this.args.map(a => a.name).join(', ')});
+          try {
+            synchronized ( getDelegate() ) {
+              while ( ! getDelegate().isPropertySet("${this.property}") ) getDelegate().wait();
+            }
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+          ${this.javaType != 'void' ? 'return ' : ''}getDelegate()
+              .${this.name}(${this.args.map(a => a.name).join(', ')});
         `;
       }
     }
@@ -2191,6 +2311,37 @@ foam.CLASS({
       var compare = info.getMethod('compare');
       compare.body = 'return 0;';
       return info;
+    }
+  ]
+});
+
+foam.CLASS({
+  package: 'foam.java',
+  name: 'TemplateAxiomJavaRefinement',
+  refines: 'foam.templates.TemplateAxiom',
+  flags: ['java'],
+
+  requires: [
+    'foam.parse.Grammar',
+    'foam.templates.TemplateUtil'
+  ],
+
+  methods: [
+
+    function buildJavaClass(cls) {
+    var result = this.TemplateUtil.create().compileJava(this.template, this.name, this.args || []);
+      var args = [{ type: 'java.lang.StringBuilder', name: 'builder' }];
+      args.push()
+      this.args.forEach(a => args.push({type: a.type, name: a.name}));
+      cls.method({
+        name: 'build' + this.name.charAt(0).toUpperCase() + this.name.slice(1),
+        type: 'void',
+        args: args,
+        body: `
+          ${result};
+        `
+      });
+      return;
     }
   ]
 });

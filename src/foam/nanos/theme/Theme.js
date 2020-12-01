@@ -20,7 +20,12 @@ foam.CLASS({
 //    'foam.nanos.auth.CreatedByAware',
     'foam.nanos.auth.EnabledAware',
     'foam.nanos.auth.LastModifiedAware',
+    'foam.nanos.auth.ServiceProviderAware',
 //    'foam.nanos.auth.LastModifiedByAware'
+  ],
+
+  requires: [
+    'foam.nanos.theme.ThemeGlyphs'
   ],
 
   tableColumns: [
@@ -89,8 +94,8 @@ foam.CLASS({
       section: 'infoSection',
     },
     {
-      name: 'enabled',
       class: 'Boolean',
+      name: 'enabled',
       value: true,
       includeInDigest: true,
       section: 'administration'
@@ -116,8 +121,8 @@ foam.CLASS({
       },
     },
     {
-      name: 'domains',
       class: 'Array',
+      name: 'domains',
       of: 'String',
       factory: function(){
         return  ['localhost'];
@@ -152,6 +157,10 @@ foam.CLASS({
       documentation: 'Menu user redirects to after login.',
       of: 'foam.nanos.menu.Menu',
       section: 'navigation'
+    },
+    {
+      class: 'Map',
+      name: 'headConfig'
     },
     {
       class: 'Image',
@@ -200,6 +209,18 @@ foam.CLASS({
       section: 'images'
     },
     {
+      class: 'FObjectProperty',
+      of: 'foam.nanos.theme.ThemeGlyphs',
+      name: 'glyphs',
+      documentation: `
+        Glyphs are simple vectors which can be used as menu items
+        or indicators.
+      `.replace('\n',' ').trim(),
+      factory: function () {
+        return this.ThemeGlyphs.create();
+      }
+    },
+    {
       class: 'String',
       name: 'topNavigation',
       documentation: 'A custom top nav view to use.',
@@ -218,6 +239,11 @@ foam.CLASS({
     {
       class: 'Code',
       name: 'customCSS',
+      section: 'sectionCss'
+    },
+    {
+      class: 'String',
+      name: 'font1',
       section: 'sectionCss'
     },
     {
@@ -243,6 +269,31 @@ foam.CLASS({
     {
       class: 'Color',
       name: 'primary5',
+      section: 'colours'
+    },
+    {
+      class: 'Color',
+      name: 'secondary1',
+      section: 'colours'
+    },
+    {
+      class: 'Color',
+      name: 'secondary2',
+      section: 'colours'
+    },
+    {
+      class: 'Color',
+      name: 'secondary3',
+      section: 'colours'
+    },
+    {
+      class: 'Color',
+      name: 'secondary4',
+      section: 'colours'
+    },
+    {
+      class: 'Color',
+      name: 'secondary5',
       section: 'colours'
     },
     {
@@ -372,8 +423,8 @@ foam.CLASS({
       section: 'inputs'
     },
     {
-      name: 'appConfig',
       class: 'foam.core.FObjectProperty',
+      name: 'appConfig',
       of: 'foam.nanos.app.AppConfig',
       section: 'applicationSection',
       factory: function() { return foam.nanos.app.AppConfig.create({}); }
@@ -444,20 +495,19 @@ foam.CLASS({
       section: 'administration'
     },
     {
-      class: 'String',
-      name: 'supportPhone'
+      name: 'spid',
+      class: 'Reference',
+      of: 'foam.nanos.auth.ServiceProvider',
+      value: foam.nanos.auth.ServiceProviderAware.GLOBAL_SPID
     },
     {
-      class: 'String',
-      name: 'supportEmail'
-    },
-    {
-      class: 'FObjectProperty',
-      of: 'foam.nanos.auth.Address',
-      name: 'supportAddress',
-      factory: function() {
-        return foam.nanos.auth.Address.create({});
-      },
+      class: 'foam.core.FObjectProperty',
+      of:'foam.nanos.app.SupportConfig',
+      name: 'supportConfig',
+      factory: function() { return foam.nanos.app.SupportConfig.create({},this)},
+      javaFactory: `
+        return new foam.nanos.app.SupportConfig();
+      `
     }
   ],
 
@@ -475,9 +525,13 @@ foam.CLASS({
   methods: [
     {
       name: 'toSummary',
+      type: 'String',
       code: function() {
         return this.name + ' ' + this.description;
-      }
+      },
+      javaCode: `
+        return foam.util.SafetyUtil.isEmpty(getName()) || foam.util.SafetyUtil.isEmpty(getDescription()) ? "" : getName() + " " + getDescription();
+      `
     },
   ]
 });

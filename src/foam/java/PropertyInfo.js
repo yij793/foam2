@@ -45,7 +45,15 @@ foam.CLASS({
     },
     {
       class: 'Boolean',
+      name: 'externalTransient'
+    },
+    {
+      class: 'Boolean',
       name: 'storageTransient'
+    },
+    {
+      class: 'Boolean',
+      name: 'storageOptional'
     },
     {
       class: 'Boolean',
@@ -117,8 +125,15 @@ foam.CLASS({
     'toCSVLabel',
     'fromCSVLabelMapping',
     {
+      class: 'Boolean',
+      name: 'sheetsOutput',
+      documentation: 'The sheetsOutput specifies if property shoud be written to Google Sheet on import. eg on Transaction import in case there is Status column transaction\'s status will be written there'
+    },
+    {
       name: 'methods',
       factory: function() {
+        var fullName = this.sourceCls.package ? this.sourceCls.package + '.' + this.sourceCls.name : this.sourceCls.name;
+
         var m = [
           {
             name: 'getName',
@@ -131,33 +146,33 @@ foam.CLASS({
             type: this.propType,
             visibility: 'public',
             args: [{ name: 'o', type: 'Object' }],
-            body: 'return ((' + this.sourceCls.name + ') o).' + this.getterName + '();'
+            body: 'return ((' + fullName + ') o).' + this.getterName + '();'
           },
           {
             name: 'set',
             type: 'void',
             visibility: 'public',
             args: [{ name: 'o', type: 'Object' }, { name: 'value', type: 'Object' }],
-            body: '((' + this.sourceCls.name + ') o).' + this.setterName + '(cast(value));'
+            body: '((' + fullName + ') o).' + this.setterName + '(cast(value));'
           },
           {
             name: 'clear',
             type: 'void',
             visibility: 'public',
             args: [{ name: 'o', type: 'Object' }],
-            body: '((' + this.sourceCls.name + ') o).' + this.clearName + '();'
+            body: '((' + fullName + ') o).' + this.clearName + '();'
           },
           {
             name: 'isSet',
             visibility: 'public',
             type: 'boolean',
             args: [{ name: 'o', type: 'Object' }],
-            body: `return ((${this.sourceCls.name}) o).${this.propName}IsSet_;`
+            body: `return ((${fullName}) o).${this.propName}IsSet_;`
           }
         ];
         var primitiveType = ['boolean', 'long', 'byte', 'double','float','short','int'];
-        
-        if ( this.propType == 'java.util.Date' || 
+
+        if ( this.propType == 'java.util.Date' ||
              ! ( primitiveType.includes(this.propType) || this.propType == 'Object' || this.propType == 'String') ){
           m.push({
             name: 'cast',
@@ -167,9 +182,9 @@ foam.CLASS({
             body: 'return ' + ( this.propType == "Object" ? 'o;' : '( ' + this.propType + ') o;')
           });
         }
-        
+
         if ( this.propType == 'java.util.Date' ||
-             this.propType == 'String' ||  
+             this.propType == 'String' ||
              ! ( primitiveType.includes(this.propType)|| this.propType == 'Object' || this.extends == 'foam.core.AbstractFObjectPropertyInfo' || this.extends == 'foam.core.AbstractFObjectArrayPropertyInfo') ){
           m.push({
             name: 'getSQLType',
@@ -178,10 +193,10 @@ foam.CLASS({
             body: 'return "' + this.sqlType + '";'
           });
         }
-        
-        if ( this.propType == 'java.util.Date' || 
-             this.propType == 'String' || 
-             this.propType == 'Object' || 
+
+        if ( this.propType == 'java.util.Date' ||
+             this.propType == 'String' ||
+             this.propType == 'Object' ||
              ! ( primitiveType.includes(this.propType) ) ){
           m.push({
             name: 'get',
@@ -190,7 +205,7 @@ foam.CLASS({
             args: [{ name: 'o', type: 'Object' }],
             body: 'return get_(o);'
           });
-  
+
           m.push({
             name: 'jsonParser',
             type: 'foam.lib.parse.Parser',
@@ -233,7 +248,7 @@ foam.CLASS({
           });
         }
 
-        if ( ! ( primitiveType.includes(this.propType) || this.propType  == 'java.util.Date' || this.propType == 'String' || this.propType == 'Object' || this.extends == 'foam.core.AbstractFObjectPropertyInfo') ) {  
+        if ( ! ( primitiveType.includes(this.propType) || this.propType  == 'java.util.Date' || this.propType == 'String' || this.propType == 'Object' || this.extends == 'foam.core.AbstractFObjectPropertyInfo') ) {
           m.push({
             name: 'compare',
             type: 'int',
@@ -265,22 +280,25 @@ foam.CLASS({
             /* TODO: revise when/if expression support is added to Java */
             body: `return foam.util.SafetyUtil.compare(get_(o), ${this.propValue}) == 0;`
           });
-          m.push({
-            name: 'format',
-            visibility: 'public',
-            type: 'void',
-            args: [
-              {
-                name: 'formatter',
-                type: 'foam.lib.formatter.FObjectFormatter'
-              },
-              {
-                name: 'obj',
-                type: 'foam.core.FObject'
-              }
-            ],
-            body: 'formatter.output(get_(obj));'
-          });
+          // TODO: We could reduce the amount a Enum PropertyInfo code we output
+          if ( this.extends != 'foam.core.AbstractEnumPropertyInfo' ) {
+            m.push({
+              name: 'format',
+              visibility: 'public',
+              type: 'void',
+              args: [
+                {
+                  name: 'formatter',
+                  type: 'foam.lib.formatter.FObjectFormatter'
+                },
+                {
+                  name: 'obj',
+                  type: 'foam.core.FObject'
+                }
+              ],
+              body: 'formatter.output(get_(obj));'
+            });
+          }
         }
 
         if ( this.networkTransient ) {
@@ -292,12 +310,30 @@ foam.CLASS({
           });
         }
 
+        if ( this.externalTransient ) {
+          m.push({
+            name: 'getExternalTransient',
+            type: 'boolean',
+            visibility: 'public',
+            body: 'return ' + this.externalTransient + ';'
+          });
+        }
+
         if ( this.storageTransient ) {
           m.push({
             name: 'getStorageTransient',
             type: 'boolean',
             visibility: 'public',
             body: 'return ' + this.storageTransient + ';'
+          });
+        }
+
+        if ( this.storageOptional ) {
+          m.push({
+            name: 'getStorageOptional',
+            type: 'boolean',
+            visibility: 'public',
+            body: 'return ' + this.storageOptional + ';'
           });
         }
 
@@ -438,6 +474,15 @@ foam.CLASS({
             visibility: 'public',
             type:       'boolean',
             body:       `return ${this.containsDeletablePII};`
+          });
+        }
+
+        if ( this.sheetsOutput ) {
+          m.push({
+            name: 'getSheetsOutput',
+            type: 'boolean',
+            visibility: 'public',
+            body: 'return ' + this.sheetsOutput + ';'
           });
         }
 

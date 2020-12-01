@@ -9,7 +9,7 @@ foam.INTERFACE({
   name: 'GoogleSheetsExport',
   methods: [
     {
-      name: 'createSheet',
+      name: 'createSheetAndPopulateWithData',
       type: 'String',
       javaThrows: [ 'java.lang.Exception' ],
       async: true,
@@ -19,13 +19,35 @@ foam.INTERFACE({
           type: 'Context',
         },
         {
-          name: 'obj',
-          type: 'Object'
+          name: 'metadataObj',
+          type: 'foam.nanos.export.GoogleSheetsPropertyMetadata[]',
+          javaType: 'Object'
+        },
+        {
+          name: 'extraConfig',
+          type: 'Object',
+          javaType: 'foam.nanos.export.GoogleSheetsServiceConfig'
+        }
+      ]
+    },
+    {
+      name: 'createSheetByCopyingTemplate',
+      type: 'String',
+      javaThrows: [ 'java.lang.Exception' ],
+      async: true,
+      args: [
+        {
+          name: 'x',
+          type: 'Context',
         },
         {
           name: 'metadataObj',
           type: 'foam.nanos.export.GoogleSheetsPropertyMetadata[]',
           javaType: 'Object'
+        },
+        {
+          name: 'extraConfig',
+          type: 'foam.nanos.export.GoogleSheetsServiceConfig'
         }
       ]
     },
@@ -42,6 +64,57 @@ foam.INTERFACE({
         }
       ],
       javaThrows: [ 'java.io.IOException', 'java.security.GeneralSecurityException' ]
+    },
+    {
+      name: 'createSheetAndPopulateWithFrontEndData',
+      type: 'String',
+      javaThrows: [ 'java.lang.Exception' ],
+      async: true,
+      args: [
+        {
+          name: 'x',
+          type: 'Context',
+        },
+        {
+          name: 'obj',
+          javaType: 'Object'
+        },
+        {
+          name: 'metadataObj',
+          type: 'foam.nanos.export.GoogleSheetsPropertyMetadata[]',
+          javaType: 'Object'
+        },
+        {
+          name: 'extraConfig',
+          type: 'Object',
+          javaType: 'foam.nanos.export.GoogleSheetsServiceConfig'
+        }
+      ]
+    },
+    {
+      name: 'createSheetByCopyingTemplateAndFronEndData',
+      javaType: 'String',
+      javaThrows: [ 'java.lang.Exception' ],
+      async: true,
+      args: [
+        {
+          name: 'x',
+          type: 'Context',
+        },
+        {
+          name: 'obj',
+          javaType: 'Object'
+        },
+        {
+          name: 'metadataObj',
+          type: 'foam.nanos.export.GoogleSheetsPropertyMetadata[]',
+          javaType: 'Object'
+        },
+        {
+          name: 'extraConfig',
+          type: 'foam.nanos.export.GoogleSheetsServiceConfig'
+        }
+      ]
     }
   ]
 });

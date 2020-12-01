@@ -14,46 +14,117 @@ foam.CLASS({
   ],
 
   requires: [
+    'foam.dao.ArrayDAO',
+    'foam.dao.NullDAO',
     'foam.nanos.crunch.Capability',
     'foam.nanos.crunch.CapabilityCategory',
     'foam.nanos.crunch.CapabilityCategoryCapabilityJunction',
-    'foam.u2.Tab',
-    'foam.u2.Tabs',
-    'foam.u2.UnstyledTabs',
+    'foam.nanos.crunch.CapabilityJunctionStatus',
+    'foam.nanos.crunch.UserCapabilityJunction',
     'foam.u2.crunch.CapabilityCardView',
     'foam.u2.crunch.CapabilityFeatureView',
+    'foam.u2.Element',
     'foam.u2.layout.Grid',
-    'foam.u2.layout.GUnit'
+    'foam.u2.layout.GUnit',
+    'foam.u2.Tab',
+    'foam.u2.Tabs',
+    'foam.u2.UnstyledTabs'
   ],
 
   imports: [
     'auth',
+    'ctrl',
     'capabilityCategoryCapabilityJunctionDAO',
     'capabilityCategoryDAO',
     'capabilityDAO',
     'crunchController',
+    'crunchService',
     'registerElement'
   ],
 
   messages: [
-    { name: 'TAB_ALL', message: 'All' }
+    { name: 'TAB_ALL', message: 'All' },
+    { name: 'TITLE', message: 'Registration' },
+    { name: 'SUBTITLE', message: 'To complete the registration, follow the steps below' }
   ],
 
   css: `
     ^ {
-      max-width: 1024px;
       margin: auto;
       padding: 12px 24px 24px 24px;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
     }
+
+    ^label-title {
+      font-weight: 900;
+      font-size: 32px;
+      margin: 24px 16px;
+      margin-bottom: 8px;
+    }
+
+    ^label-subtitle {
+      margin: 16px;
+      margin-top: 0;
+      color: #9ba1a6;
+      font-size: 18px;
+    }
+
+    ^category {
+      margin-top: 48px;
+      padding: 0px 12px;
+    }
+
     ^feature-column-grid {
-      justify-content: space-between;
+      display: inline-flex;
+      width: 94%;
+      overflow: hidden;
+    }
+
+    ^featureSection {
+      flex: 0;
+      height: auto;
+    }
+
+    ^perFeature {
       display: flex;
-      flex-direction: row;
+      padding-bottom: 55px;
+    }
+
+    ^left-arrow {
+      width: 3%;
+      float: left;
+      display: flex;
+      cursor: pointer;
+      padding-top: 70px;
+      -webkit-transition: padding 2s;
+    }
+
+    ^right-arrow {
+      width: 3%;
+      float: right;
+      display: flex;
+      cursor: pointer;
+      padding-top: 70px;
+      margin-left: -20px;
+      z-index: 10000;
+      position: relative;
+      -webkit-transition: padding 2s;
+    }
+
+    ^container {
+      display: inline-block;
+      width: 100%;
       height: fit-content;
-      align-items: stretch;
+      overflow-y: visible;
+      margin-top: 24px;
     }
   `,
   
+  constants: {
+    MAX_NUM_DISPLAYBLE_CARDS: 4
+  },
+
   properties: [
     {
       name: 'visibleCapabilityDAO',
@@ -61,9 +132,8 @@ foam.CLASS({
       documentation: `
         DAO with only visible capabilities.
       `,
-      factory: function () {
-        return this.capabilityDAO
-          .where(this.EQ(this.Capability.VISIBLE, true));
+      factory: function() {
+        return this.NullDAO.create();
       }
     },
     {
@@ -72,8 +142,8 @@ foam.CLASS({
       documentation: `
         DAO Property to find capabilities to feature.
       `,
-      factory: function () {
-        return this.visibleCapabilityDAO
+      expression: function(visibleCapabilityDAO) {
+        return visibleCapabilityDAO
           .where(this.IN('featured', this.Capability.KEYWORDS));
       }
     },
@@ -83,91 +153,152 @@ foam.CLASS({
       documentation: `
         DAO Property to find categories that are visible.
       `,
-      expression: function (capabilityCategoryDAO) {
+      expression: function(capabilityCategoryDAO) {
         return capabilityCategoryDAO
           .where(this.EQ(this.CapabilityCategory.VISIBLE, true));
       }
-    }
+    },
+    {
+      name: 'carouselCounter',
+      class: 'Int',
+      documentation: 'left and right scroll counter for featureCardArray index'
+    },
+    {
+      name: 'totalNumCards',
+      class: 'Int',
+      documentation: 'should be equivalent to featureCardArray.length'
+    },
+    {
+      name: 'featureCardArray',
+      value: [],
+      documentation: 'stores the styling of each featureCapability'
+    },
+    'wizardOpened'
   ],
 
   methods: [
+    function init() {
+      this.crunchService.getAllJunctionsForUser().then(juncs => {
+        this.daoUpdate();
+      });
+      this.crunchService.getEntryCapabilities().then(a => {
+        this.visibleCapabilityDAO = this.ArrayDAO.create({
+          array: a.array
+        });
+      });
+    },
     function initE() {
       this.SUPER();
-      this.signingOfficerQuestion();
-      
+
       var self = this;
       window.cstore = self;
 
       self
         .addClass(self.myClass())
-        .start(self.Tabs)
-          .start(self.Tab, { label: this.TAB_ALL, selected: true })
-            .add(self.renderFeatured())
-          .end()
-          // TODO: replace this .call with a .select once
-          //       duplication error is fixed
-          .call(function() {
-            self.visibleCategoryDAO.select().then((a) => {
-              for ( let i = 0 ; i < a.array.length ; i++ ) {
-                let category = a.array[i];
-                let e = self.Tab.create({ label: category.name })
-                  .add(self.renderSection(category));
-                this.add(e);
-              }
-            });
-          })
+        .start('p').addClass(this.myClass('label-title'))
+          .add(this.TITLE)
+        .end()
+        .start('p').addClass(this.myClass('label-subtitle'))
+          .add(this.SUBTITLE)
+        .end()
+        .add(self.renderFeatured())
+        // NOTE: TEMPORARILY REMOVED
+        // .add(self.accountAndAccountingCard())
+        // .start(self.Tabs)
+        //   .start(self.Tab, { label: this.TAB_ALL, selected: true })
+        //     .add(self.renderFeatured())
+        //     .add(self.accountAndAccountingCard())
+        //   .end()
+        //   // TODO: replace this .call with a .select once
+        //   //       duplication error is fixed
+        //   .call(function() {
+        //     self.visibleCategoryDAO.select().then(a => {
+        //       for ( let i = 0 ; i < a.array.length ; i++ ) {
+        //         let category = a.array[i];
+        //         let e = self.Tab.create({ label: category.name })
+        //           .add(self.renderSection(category));
+        //         this.add(e);
+        //       }
+        //     });
+        //   })
         .end();
     },
-    function renderFeatured() {
+
+    function renderFeatured() { // Featured Capabilities in carousel view
       var self = this;
-      return self.E()
-        // Featured Capabilities
-        .add(self.slot(function (featuredCapabilities) {
-          var spot = this.E('span');
-          featuredCapabilities.select().then((result) => {
-            let arr = result.array;
-            let grid = self.E();
-            grid
-              .addClass(self.myClass('feature-column-grid'));
-            for ( let i = 0 ; i < arr.length ; i++ ) {
-              let cap = arr[i];
-              grid = grid
-                .start('div', { columns: 3 })
-                  .style({
-                    flex: 0,
-                    display: 'flex',
-                    height: 'auto'
-                  })
-                  .start(self.CapabilityFeatureView, { data: cap })
-                    .style({
-                      flex: 0,
-                      height: 'auto'
-                    })
+      var spot = self.E();
+      return this.E().start()// .style({ 'height': 'fit-content', 'overflow-y': 'visible' })
+        .addClass(this.myClass('container'))
+        .add(this.slot(function(featuredCapabilities) {
+          featuredCapabilities.select().then(result => {
+            var arr = result.array;
+            self.totalNumCards = arr.length;
+            self.featureCardArray = [];
+            for ( let i = 0 ; i < self.totalNumCards ; i++ ) { // build featured cards as elements
+              self.featureCardArray.push(
+                () => self.Element.create().start()
+                  .addClass(self.myClass('perFeature'))
+                  .start(self.CapabilityFeatureView, { data: arr[i] })
+                    .addClass(self.myClass('featureSection'))
                   .end()
                   .on('click', () => {
-                    self.crunchController.launchWizard(cap.id);
+                    self.openWizard(arr[i].id);
                   })
-                .end();
+                .end());
             }
-            spot.add(grid);
+            self.callIf(self.totalNumCards > self.MAX_NUM_DISPLAYBLE_CARDS, function() {
+              return spot.start('span')
+                .start('img').addClass(self.myClass('left-arrow'))
+                  .attr('src', 'images/arrow-back-24px.svg')
+                  .on('click', function() {
+                    self.carouselCounter--;
+                  })
+                .end()
+              .end();
+            });
+            spot.add(self.slot(
+              function(carouselCounter, totalNumCards) {
+                var ele = self.E().addClass(self.myClass('feature-column-grid'));
+                for ( var k = 0 ; k < totalNumCards ; k++ ) {
+                  let cc = carouselCounter % totalNumCards; // this stops any out of bounds indecies
+                  let index = ( cc + totalNumCards + k ) % totalNumCards; // this ensures circle indecies
+                  ele = ele.add(self.featureCardArray[index].call(self));
+                }
+                return ele;
+              }));
+            self.callIf(self.totalNumCards > self.MAX_NUM_DISPLAYBLE_CARDS, function() {
+              return spot.start('span')
+                .start('img').addClass(self.myClass('right-arrow'))
+                  .attr('src', 'images/arrow-forward-24px.svg')
+                  .on('click', function() {
+                    self.carouselCounter++;
+                  })
+                .end()
+              .end();
+            })
           });
           return spot;
-        }))
-        // Capability Store Section Previews
-        .select(self.visibleCategoryDAO, function(category) {
+       })).end();
+    },
+
+    function accountAndAccountingCard() {
+      // Capability Store Section Previews
+      var self = this;
+      return self.E().style({ 'width': '94%', 'margin': 'auto '})
+        .select(self.visibleCategoryDAO$proxy, function(category) {
           var sectionElement = this.E('span');
           var returnElement = this.E()
             .start('h3')
-              .add(category.name)
+              .add({ data : category, clsInfo : category.cls_.NAME.name, default : category.name })
             .end()
-            .add(sectionElement);
+            .add(sectionElement).addClass(self.myClass('category'));
           var previewIdsPromise = self.getCategoryDAO_(category.id).limit(6)
             .select().then(arraySink => arraySink.array.map(x => x.targetId) );
 
           previewIdsPromise.then(capabilityIds => {
             self.visibleCapabilityDAO.where(
               self.IN(self.Capability.ID, capabilityIds)
-            ).select().then((result) => {
+            ).select().then(result => {
               let arr = result.array;
               let grid = self.Grid.create();
               for ( let i = 0 ; i < arr.length ; i++ ) {
@@ -176,7 +307,7 @@ foam.CLASS({
                   .start(self.GUnit, { columns: 4 })
                     .tag(self.CapabilityCardView, { data: cap })
                     .on('click', () => {
-                      self.crunchController.launchWizard(cap.id);
+                      self.openWizard(cap);
                     })
                   .end();
               }
@@ -186,19 +317,21 @@ foam.CLASS({
           return returnElement;
         });
     },
+
     function renderSection(category) {
       var self = this;
       var sectionElement = this.E();
 
       // Promise 'p' reports capability IDs that are in this category
-      var p = self.getCategoryDAO_(category.id)
-        .select().then(arraySink => arraySink.array.map(x => x.targetId) );
+      var p = self.getCategoryDAO_(category.id).select(
+        self.PROJECTION(self.CapabilityCategoryCapabilityJunction.TARGET_ID));
 
       // When 'p' resolves, query all matching capabilities
-      p.then(capabilityIds => {
+      p.then(arraySink => {
+        capabilityIds = arraySink.projection;
         self.visibleCapabilityDAO.where(
           self.IN(self.Capability.ID, capabilityIds)
-        ).select().then((result) => {
+        ).select().then(result => {
           let arr = result.array;
           let grid = self.Grid.create();
           for ( let i = 0 ; i < arr.length ; i++ ) {
@@ -207,7 +340,7 @@ foam.CLASS({
               .start(self.GUnit, { columns: 4 })
                 .tag(self.CapabilityCardView, { data: cap })
                 .on('click', () => {
-                  self.crunchController.launchWizard(cap.id);
+                  self.openWizard(cap);
                 })
               .end();
           }
@@ -222,8 +355,41 @@ foam.CLASS({
           this.CapabilityCategoryCapabilityJunction.SOURCE_ID,
           categoryId));
     },
-    function signingOfficerQuestion() {
-      return this.auth.check(this.__subContext__, "businessHasSigningOfficer");
+    function daoUpdate() {
+      Promise.resolve()
+        // Get visible categories
+        .then(() => this.visibleCategoryDAO.select())
+        .then(categorySink => categorySink.array.map(cat => cat.id))
+        // Get capabilities within visible categories
+        .then(categories => {
+          return this.capabilityCategoryCapabilityJunctionDAO
+            .where(this.IN(
+              this.CapabilityCategoryCapabilityJunction.SOURCE_ID,
+              categories)).select();
+        })
+        .then(cccjSink => Object.keys(
+          cccjSink.array.map(cccj => cccj.targetId)
+          .reduce((set, capabilityId) => ({ ...set, [capabilityId]: true }), {})))
+        // Get visible capabilities within visible categories
+        .then(visibleList => this.visibleCapabilityDAO
+          .where(this.OR(
+            this.IN(this.Capability.ID, visibleList),
+            this.IN('featured', this.Capability.KEYWORDS)
+          )).select())
+        .then(sink => {
+          if ( sink.array.length == 1 ) {
+            this.openWizard(sink.array[0]);
+          }
+        })
+    },
+    function openWizard(cap) {
+      if ( this.wizardOpened ) return;
+      this.wizardOpened = true;
+      this.crunchController
+        .createWizardSequence(cap).execute().then(() => {
+          this.wizardOpened = false;
+        });
+      
     }
   ]
 });

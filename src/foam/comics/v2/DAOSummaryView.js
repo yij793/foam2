@@ -27,8 +27,7 @@ foam.CLASS({
 
     ^ .foam-u2-ActionView-back {
       display: flex;
-      align-items: center;
-      width: 30%;
+      align-self: flex-start;
     }
 
     ^account-name {
@@ -50,7 +49,6 @@ foam.CLASS({
     'foam.u2.layout.Cols',
     'foam.u2.layout.Rows',
     'foam.u2.ControllerMode',
-    'foam.u2.dialog.NotificationMessage',
     'foam.u2.dialog.Popup',
   ],
 
@@ -60,7 +58,8 @@ foam.CLASS({
   ],
 
   exports: [
-    'controllerMode'
+    'controllerMode',
+    'as objectSummaryView'
   ],
 
   properties: [
@@ -94,8 +93,8 @@ foam.CLASS({
     {
       class: 'foam.u2.ViewSpecWithJava',
       name: 'viewView',
-      expression: function() {
-        return foam.u2.detail.SectionedDetailView;
+      factory: function() {
+        return foam.u2.detail.TabbedDetailView;
       }
     },
     {
@@ -104,10 +103,20 @@ foam.CLASS({
       expression: function(config$browseTitle) {
         return 'All ' + config$browseTitle;
       }
+    },
+    {
+      name: 'onBack',
+      factory: function() {
+        return () => this.stack.back();
+      }
     }
   ],
 
   actions: [
+    {
+      name: 'back',
+      code: (data) => data.onBack()
+    },
     {
       name: 'edit',
       isEnabled: function(config, data) {
@@ -132,10 +141,10 @@ foam.CLASS({
       code: function() {
         if ( ! this.stack ) return;
         this.stack.push({
-          class: 'foam.comics.v2.DAOUpdateView',
-          data: this.data,
+          class:  'foam.comics.v2.DAOUpdateView',
+          data:   this.data,
           config: this.config,
-          of: this.config.of
+          of:     this.config.of
         }, this.__subContext__);
       }
     },
@@ -213,9 +222,11 @@ foam.CLASS({
       var self = this;
       this.SUPER();
 
+      var promise = this.data ? Promise.resolve(this.data) : this.config.unfilteredDAO.inX(this.__subContext__).find(this.id);
+
       // Get a fresh copy of the data, especially when we've been returned
       // to this view from the edit view on the stack.
-      this.config.dao.inX(this.__subContext__).find(this.data).then(d => {
+      promise.then(d => {
         if ( d ) self.data = d;
 
         this
@@ -225,8 +236,8 @@ foam.CLASS({
               .start(self.Rows)
                 .start(self.Rows)
                   // we will handle this in the StackView instead
-                  .startContext({ data: self.stack })
-                    .tag(self.stack.BACK, {
+                  .startContext({ onBack: self.onBack })
+                    .tag(self.BACK, {
                       buttonStyle: foam.u2.ButtonStyle.TERTIARY,
                       icon: 'images/back-icon.svg',
                       label: self.backLabel
@@ -235,7 +246,7 @@ foam.CLASS({
                   .start(self.Cols).style({ 'align-items': 'center' })
                     .start()
                       .add(data.toSummary())
-                      .addClass(this.myClass('account-name'))
+                      .addClass(self.myClass('account-name'))
                       .addClass('truncate-ellipsis')
                     .end()
                     .startContext({ data }).add(self.primary).endContext()
@@ -243,7 +254,7 @@ foam.CLASS({
                 .end()
 
                 .start(self.Cols)
-                  .start(self.Cols).addClass(this.myClass('actions-header'))
+                  .start(self.Cols).addClass(self.myClass('actions-header'))
                     .startContext({ data: self })
                       .tag(self.EDIT, {
                         buttonStyle: foam.u2.ButtonStyle.TERTIARY,
@@ -260,9 +271,8 @@ foam.CLASS({
                     .endContext()
                   .end()
                 .end()
-
                 .start(config$viewBorder)
-                  .start(viewView, { data }).addClass(this.myClass('view-container')).end()
+                  .start(viewView, { data }).addClass(self.myClass('view-container')).end()
                 .end()
               .end();
           }));

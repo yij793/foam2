@@ -9,7 +9,10 @@ foam.CLASS({
   name: 'Test',
   extends: 'foam.nanos.script.Script',
 
-  imports: ['testDAO as scriptDAO'],
+  imports: [
+    'testDAO',
+    'testEventDAO'
+  ],
 
   javaImports: [
     'bsh.Interpreter',
@@ -63,11 +66,12 @@ foam.CLASS({
     {
       class: 'String',
       name: 'daoKey',
-      value: 'testDAO',
-      transient: true,
-      visibility: 'HIDDEN',
-      documentation: `Name of dao which journal will be used to store script run logs. To set from inheritor
-      just change property value`
+      value: 'testDAO'
+    },
+    {
+      class: 'String',
+      name: 'eventDaoKey',
+      value: 'testEventDAO'
     }
   ],
 
@@ -152,10 +156,9 @@ foam.CLASS({
             };
 
             with ( { log: log, print: log, x: this.__context__, test: test } ) {
-              new Promise.resolve(eval(this.code)).then(() => {
+              Promise.resolve(eval(this.code)).then(() => {
                 updateStats();
                 resolve();
-                //          this.scriptDAO.put(this);
               }, (err) => {
                 updateStats();
                 this.failed += 1;

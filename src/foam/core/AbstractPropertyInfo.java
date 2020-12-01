@@ -45,7 +45,15 @@ public abstract class AbstractPropertyInfo
     return false;
   }
 
+  public boolean getExternalTransient() {
+    return false;
+  }
+
   public boolean getStorageTransient() {
+    return false;
+  }
+
+  public boolean getStorageOptional() {
     return false;
   }
 
@@ -209,6 +217,11 @@ public abstract class AbstractPropertyInfo
 
   @Override
   public boolean containsDeletablePII(){
+    return false;
+  }
+
+  @Override
+  public boolean getSheetsOutput(){
     return false;
   }
 

@@ -86,7 +86,6 @@ FOAM_FILES([
   { name: "foam/core/Serializable" },
   { name: "foam/core/Freezable" },
   { name: "foam/core/Detachable" },
-  { name: "foam/core/AbstractFObject" },
   { name: "foam/core/ContextAgent" },
   { name: "foam/core/Agency" },
   { name: "foam/i18n/TranslationFormatStringParser", flags: ['swift'] },
@@ -184,7 +183,7 @@ FOAM_FILES([
   { name: "foam/dao/DAO" },
   { name: "foam/dao/daoUtils" },
   { name: "foam/dao/ArraySink" },
-  { name: "foam/dao/DAODecorator" },
+  { name: "foam/dao/DAOInterceptor" },
   { name: "foam/dao/AbstractDAO" },
   { name: "foam/dao/FilteredDAO" },
   { name: "foam/dao/DAOProperty" },
@@ -208,7 +207,7 @@ FOAM_FILES([
   { name: "foam/dao/MDAO" },
   { name: "foam/dao/ArrayDAO" },
   { name: "foam/dao/TimestampDAO" },
-  { name: "foam/dao/AdapterDAO" },
+  { name: "foam/dao/CopyFromDAO" },
   { name: "foam/dao/GUIDDAO" },
   { name: "foam/dao/ReadOnlyDAO" },
   { name: "foam/dao/StoreAndForwardDAO" },
@@ -387,6 +386,7 @@ FOAM_FILES([
   { name: "foam/u2/DateView", flags: ['web'] },
   { name: "foam/u2/DateTimeView", flags: ['web'] },
   { name: "foam/u2/RangeView", flags: ['web'] },
+  { name: "foam/u2/ReadWriteView", flags: ['web'] },
   { name: "foam/u2/HTMLElement", flags: ['web'] },
   { name: "foam/u2/tag/Select", flags: ['web'] },
   { name: "foam/u2/UnstyledTabs", flags: ['web'] },
@@ -583,5 +583,9 @@ FOAM_FILES([
   { name: "foam/build/ClassLoaderContext" },
 
   { name: "foam/core/CoreTypesValidationTest" },
-  { name: "foam/core/CoreTypesValidationTestModel" }
+  { name: "foam/core/CoreTypesValidationTestModel" },
+  
+  // Translation Support
+  { name: "foam/i18n/XLIFFTranslationValue" },
+  { name: "foam/i18n/Locale" },
 ]);

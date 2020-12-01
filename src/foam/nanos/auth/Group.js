@@ -21,7 +21,7 @@ foam.CLASS({
 
   documentation: 'A Group of Users.',
 
-  tableColumns: [ 'id', 'description', 'defaultMenu', 'parent' ],
+  tableColumns: [ 'id', 'description', 'defaultMenu.id', 'parent.id' ],
 
   searchColumns: [ 'id', 'description' ],
 
@@ -122,7 +122,15 @@ foam.CLASS({
         class: 'foam.u2.view.FObjectPropertyView',
         readView: { class: 'foam.u2.detail.VerticalDetailView' }
       }
-    }
+    },
+    {
+      documentation: `Restrict members of this group to particular IP address range.
+@see https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
+List entries are of the form: 172.0.0.0/24 - this would restrict logins to the 172 network.`,
+      class: 'StringArray',
+      name: 'cidrWhiteList',
+      includeInDigest: true
+    },
     /*
       FUTURE
     {
@@ -136,13 +144,12 @@ foam.CLASS({
   javaImports: [
     'foam.dao.ArraySink',
     'foam.dao.DAO',
+    'static foam.mlang.MLang.EQ',
     'foam.nanos.app.AppConfig',
     'foam.util.SafetyUtil',
-    'org.eclipse.jetty.server.Request',
-    'javax.security.auth.AuthPermission',
-    'javax.servlet.http.HttpServletRequest',
     'java.util.List',
-    'static foam.mlang.MLang.EQ'
+    'java.net.InetAddress',
+    'javax.security.auth.AuthPermission'
   ],
 
   methods: [
@@ -161,9 +168,16 @@ foam.CLASS({
         }
       ],
       javaCode: `
-        List<GroupPermissionJunction> junctions = ((ArraySink) getPermissions(x).getJunctionDAO().where(EQ(GroupPermissionJunction.SOURCE_ID, getId())).select(new ArraySink())).getArray();
+        List<GroupPermissionJunction> junctions = ((ArraySink) getPermissions(x)
+          .getJunctionDAO()
+            .where(EQ(GroupPermissionJunction.SOURCE_ID, getId()))
+            .select(new ArraySink())).getArray();
 
         for ( GroupPermissionJunction j : junctions ) {
+          if ( j.getTargetId().isBlank() ) {
+            continue;
+          }
+
           if ( j.getTargetId().startsWith("@") ) {
             DAO   dao   = (DAO) x.get("groupDAO");
             Group group = (Group) dao.find(j.getTargetId().substring(1));
@@ -263,7 +277,23 @@ foam.CLASS({
     },
     {
       name: 'authorizeOnRead',
-      javaCode: '// NOOP'
+      javaCode: `
+        // if the group is the group of the user, or an ancestor of the group of the user,
+        // then user should be authorized to read
+        DAO localGroupDAO = (DAO) x.get("localGroupDAO");
+        User user = (User) ((Subject) x.get("subject")).getUser();
+        Group userGroup = (Group) localGroupDAO.find(user.getGroup());
+        while ( userGroup != null ) { 
+          if ( getId() == userGroup.getId() ) return;
+          userGroup = getAncestor(x, userGroup);  
+        }
+
+        AuthService auth = (AuthService) x.get("auth");
+        String permissionId = String.format("group.read.%s", getId());
+        if ( ! auth.check(x, permissionId) ) {
+          throw new AuthorizationException("You do not have permission to read this group.");
+        }
+      `
     },
     {
       name: 'authorizeOnUpdate',
@@ -339,6 +369,64 @@ foam.CLASS({
 
         return ancestor;
       `
+    },
+    {
+      name: 'validateCidrWhiteList',
+      args: [
+        {
+          name: 'x',
+          type: 'Context'
+        }
+      ],
+      javaThrows: ['foam.core.ValidationException'],
+      javaCode: `
+      if ( getCidrWhiteList() == null ||
+           getCidrWhiteList().length == 0 ) {
+        return;
+      }
+      javax.servlet.http.HttpServletRequest req = (javax.servlet.http.HttpServletRequest) x.get(javax.servlet.http.HttpServletRequest.class); 
+      if ( req == null ) {
+        return;
+      }
+      String remoteIp = null;
+      String forwardedForHeader = req.getHeader("X-Forwarded-For");
+      if ( ! SafetyUtil.isEmpty(forwardedForHeader) ) {
+        String[] addresses = forwardedForHeader.split(",");
+        remoteIp = addresses[addresses.length -1]; // right most
+      } else {
+        remoteIp = req.getRemoteHost();
+      }
+      byte[] remote = remoteIp.getBytes();
+      boolean match = false;
+      for ( String cidr : getCidrWhiteList() ) {
+        String[] parts = cidr.split("/");
+        String address = parts[0];
+        int maskBits = -1;
+        if ( parts.length == 1 ) {
+          if ( address.equals(remoteIp) ) {
+            match = true;
+            return;
+          }
+        }
+        maskBits = Integer.parseInt(parts[1]);
+        byte[] required = address.getBytes();
+
+        int maskFullBytes = maskBits / 8;
+        byte finalByte = (byte) (0xFF00 >> (maskBits & 0x07));
+
+        for (int i = 0; i < maskFullBytes; i++) {
+          if (remote[i] != required[i]) {
+            throw new foam.core.ValidationException("Restricted IP");
+          }
+        }
+
+        if (finalByte != 0) {
+          if ( (remote[maskFullBytes] & finalByte) != (required[maskFullBytes] & finalByte) ) {
+            throw new foam.core.ValidationException("Restricted IP");
+          }
+        }
+      }
+      `
     }
   ]
 });
@@ -366,7 +454,7 @@ foam.CLASS({
   messages: [
     {
       name: 'ERROR_MESSAGE',
-      message: 'Permission denied. You cannot change the parent of a group if doing so grants that group permissions that you do not have.',
+      message: 'Permission denied. You cannot change the parent of a group.',
     }
   ],
 
@@ -406,7 +494,6 @@ foam.RELATIONSHIP({
   },
   targetProperty: {
     hidden: false,
-    tableWidth: 120,
-    section: 'administrative'
+    tableWidth: 120
   }
 });

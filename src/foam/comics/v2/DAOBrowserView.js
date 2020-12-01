@@ -8,14 +8,16 @@ foam.CLASS({
   package: 'foam.comics.v2',
   name: 'DAOBrowserView',
   extends: 'foam.u2.View',
+
   requires: [
     'foam.comics.SearchMode',
     'foam.comics.v2.DAOControllerConfig',
+    'foam.log.LogLevel',
     'foam.u2.ActionView',
     'foam.u2.dialog.Popup',
+    'foam.u2.filter.FilterView',
     'foam.u2.layout.Cols',
     'foam.u2.layout.Rows',
-    'foam.u2.filter.FilterView',
     'foam.u2.view.ScrollTableView',
     'foam.u2.view.SimpleSearch',
     'foam.u2.view.TabChoiceView',
@@ -51,7 +53,7 @@ foam.CLASS({
 
     ^query-bar {
       padding: 40px 16px;
-      align-items: center;
+      align-items: flex-start;
       justify-content: flex-end;
     }
 
@@ -93,12 +95,14 @@ foam.CLASS({
   ],
 
   imports: [
-    'stack?'
+    'stack?',
+    'ctrl'
   ],
 
   exports: [
     'dblclick',
-    'filteredTableColumns'
+    'filteredTableColumns',
+    'serviceName'
   ],
 
   properties: [
@@ -163,8 +167,26 @@ foam.CLASS({
       expression: function(config, cannedPredicate) {
         return config.dao$proxy.where(cannedPredicate);
       }
+    },
+    {
+      name: 'serviceName',
+      class: 'String',
+      factory: function() {
+        return this.data && this.data.serviceName ? this.data.serviceName : this.config.daoKey;
+      }
+    },
+    {
+      name: 'importModal',
+      factory: function() {
+        return {
+          class: 'foam.nanos.google.api.sheets.ImportFromGoogleSheetsForm',
+          of: this.config.of,
+          dao: this.serviceName
+        };
+      }
     }
   ],
+
   actions: [
     {
       name: 'export',
@@ -187,12 +209,21 @@ foam.CLASS({
       code: function(X) {
         this.config.dao.cmd_(X, foam.dao.CachingDAO.PURGE);
         this.config.dao.cmd_(X, foam.dao.AbstractDAO.RESET_CMD);
-        this.add(foam.u2.dialog.NotificationMessage.create({
-          message: this.REFRESH_MSG
-        }));
+        this.ctrl.notify(this.REFRESH_MSG, '', this.LogLevel.INFO, true);
+      }
+    },
+    {
+      name: 'import',
+      label: '',
+      availablePermissions: [ "data.import.googleSheets" ],
+      toolTip: 'Import From Google Sheet',
+      // icon: 'images/export-arrow-icon.svg',//need find out where we're getting the icons
+      code: function() {
+        this.add(this.Popup.create().tag(this.importModal));
       }
     }
   ],
+
   methods: [
     function init() {
       // Reset the search filters when a different canned query is selected
@@ -200,13 +231,13 @@ foam.CLASS({
         this.searchPredicate = foam.mlang.predicate.True.create();
       }));
     },
-    function dblclick(obj) {
+    function dblclick(obj, id) {
       if ( ! this.stack ) return;
       this.stack.push({
         class: 'foam.comics.v2.DAOSummaryView',
         data: obj,
         config: this.config,
-        of: this.config.of
+        id: id
       }, this.__subContext__);
     },
     function initE() {
@@ -249,6 +280,7 @@ foam.CLASS({
                       })
                       .callIf(self.config.searchMode === self.SearchMode.FULL, function() {
                         this.tag(self.FilterView, {
+                          dao$: self.searchFilterDAO$,
                           data$: self.searchPredicate$
                         });
                       })
@@ -257,12 +289,18 @@ foam.CLASS({
                       .start(self.EXPORT, { buttonStyle: 'SECONDARY' })
                         .addClass(self.myClass('export'))
                       .end()
-                      .tag(this.REFRESH_TABLE, { buttonStyle: 'SECONDARY' })
+                      .start(self.IMPORT, { buttonStyle: 'SECONDARY', icon: 'images/export-arrow-icon.svg', css: {'transform': 'rotate(180deg)'} })
+                        .addClass(self.myClass('export'))
+                      .end()
+                      .start(self.REFRESH_TABLE, { buttonStyle: 'SECONDARY' })
+                        .addClass(self.myClass('refresh'))
+                      .end()
                     .endContext()
                   .end();
               })
               .start(self.summaryView,{
-                data: self.predicatedDAO$proxy
+                data: self.predicatedDAO$proxy,
+                config: self.config
               })
                 .addClass(self.myClass('browse-view-container'))
               .end()

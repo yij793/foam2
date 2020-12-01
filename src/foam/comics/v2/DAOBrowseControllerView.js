@@ -82,6 +82,7 @@ foam.CLASS({
       }
     }
   ],
+
   actions: [
     {
       name: 'create',
@@ -89,7 +90,7 @@ foam.CLASS({
         if ( config.CRUDEnabledActionsAuth && config.CRUDEnabledActionsAuth.isEnabled ) {
           try {
             let permissionString = config.CRUDEnabledActionsAuth.enabledActionsAuth.permissionFactory(foam.nanos.ruler.Operations.CREATE, data);
-  
+
             return this.auth.check(null, permissionString);
           } catch(e) {
             return false;
@@ -108,13 +109,14 @@ foam.CLASS({
         if ( ! this.stack ) return;
         this.stack.push({
           class: 'foam.comics.v2.DAOCreateView',
-          data: this.data.of.create({ mode: 'create' }, this),
+          data: ((this.config.factory && this.config.factory$cls) ||  this.data.of).create({ mode: 'create'}, this),
           config$: this.config$,
           of: this.data.of
         }, this.__subContext__);
       }
     }
   ],
+
   methods: [
     function initE() {
     this.SUPER();

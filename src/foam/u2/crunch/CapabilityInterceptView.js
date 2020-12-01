@@ -9,144 +9,207 @@ foam.CLASS({
   name: 'CapabilityInterceptView',
   extends: 'foam.u2.View',
 
-  implements: [ 'foam.mlang.Expressions' ],
+  implements: [
+    'foam.mlang.Expressions'
+  ],
 
   requires: [
+    'foam.log.LogLevel',
+    'foam.nanos.crunch.AgentCapabilityJunction',
     'foam.nanos.crunch.Capability',
     'foam.nanos.crunch.CapabilityJunctionStatus',
     'foam.nanos.crunch.UserCapabilityJunction',
     'foam.u2.crunch.CapabilityCardView',
-    'foam.u2.layout.Grid',
-    'foam.u2.layout.GUnit'
+    'foam.u2.layout.Rows'
   ],
 
   imports: [
-    'capabilityAcquired',
-    'capabilityCache',
-    'capabilityCancelled',
     'capabilityDAO',
     'crunchController',
-    'notify',
-    'stack',
-    'user',
-    'userCapabilityJunctionDAO'
+    'crunchService',
+    'notify'
   ],
 
   properties: [
     {
-      name: 'capabilityOptions',
-      class: 'StringArray'
-    },
-    {
-      name: 'capabilityView',
-      class: 'foam.u2.ViewSpec',
-      factory: function () {
-        return 'foam.u2.crunch.CapabilityCardView';
+      name: 'onClose',
+      class: 'Function',
+      factory: function() {
+        return x => x.closeDialog();
       }
     }
   ],
 
   messages: [
-    { name: 'REJECTED_MSG', message: 'Your choice to bypass this was stored, please refresh page to revert cancel selection.' }
+    { name: 'TITLE', message: 'Missing Capability' },
+    { name: 'LABEL_CAP_LIST', message: 'CAPABILITIES' },
+    { name: 'SUBTITLE_1', message: 'You are currently incapable of performing this action.' },
+    { name: 'SUBTITLE_2', message: 'Please refer to the following list on how to obtain the capability.' }
   ],
 
   css: `
-    ^ {
-      width: 1024px;
-      margin: auto;
+    ^{
+      display: flex;
+      flex-direction: column;
+      width: 55vw;
+      padding: 24px;
+      max-height: 75%;
+    }
+    ^container-close {
+      display: flex;
+      justify-content: flex-end;
+    }
+    ^container-close button {
+      padding: 0;
+    }
+    ^container-close img {
+      margin-right: 0;
+      width: 16px;
+    }
+    ^container-title {
+      text-align: center;
+      margin-top: 16px;
     }
     ^detail-container {
-      overflow-x: scroll;
+      overflow-y: scroll;
+      width: 100%;
+    }
+    ^main-section {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+
+      padding: 80px;
+
+      max-height: 60%;
+      overflow-y: scroll;
+    }
+    ^label-title {
+      margin: 0;
+
+      font-size: 32px;
+      font-weight: bold;
+      letter-spacing: 1;
+    }
+    ^label-subtitle {
+      margin: 0;
+      margin-top: 8px;
+
+      font-size: 16px;
+      color: #5e6061;
+    }
+    ^label-subtitle:last-child {
+      margin-top: 0;
+    }
+    ^label-cap {
+      margin: 0;
+      font-weight: bold;
+      font-size: 12px;
+    }
+    ^detail-container .foam-u2-crunch-Style-mode-circle {
+      width: 100%;
+      margin: 8px 0;
+    }
+
+    ^detail-container .foam-u2-crunch-Style-mode-circle:hover {
+      border-color: #f3f3f3;
     }
   `,
 
   methods: [
     function initE() {
-      this.capabilityOptions.forEach((c) => {
-        if ( this.capabilityCache.has(c) && this.capabilityCache.get(c) ) {
-          capabilityAcquired = true;
-          this.stack.back();
+      this.data.capabilityOptions.forEach(c => {
+        if (
+          this.crunchController.capabilityCache.has(c) &&
+          this.crunchController.capabilityCache.get(c)
+        ) {
+          this.aquire();
         }
       });
 
-      var view = this;
+      var self = this;
       this
         .addClass(this.myClass())
-        .start()
-          .addClass(this.myClass('detail-container'))
-          .add(this.slot(function (capabilityOptions) {
-            var spot = this.E('span')
-            this.capabilityDAO.where(
-                this.IN(view.Capability.ID, capabilityOptions))
-              .select().then((result) => {
-                let arr = result.array;
-                let grid = view.Grid.create();
-                for ( let i = 0 ; i < arr.length ; i++ ) {
-                  let cap = arr[i];
-                  grid = grid
-                    .start(view.GUnit, { columns: 4 })
-                      .tag(view.capabilityView, { data: cap })
-                      .on('click', () => {
-                        var p = view.crunchController.launchWizard(cap.id);
-                        p.then(() => {
-                          // Query UCJ status
-                          this.userCapabilityJunctionDAO.where(this.AND(
-                            this.EQ(this.UserCapabilityJunction.SOURCE_ID, this.user.id),
-                            this.EQ(this.UserCapabilityJunction.TARGET_ID, cap.id)
-                          )).limit(1).select(this.PROJECTION(
-                            this.UserCapabilityJunction.STATUS
-                          )).then(results => {
-                            if ( results.array.length < 1 ) {
-                              view.reject();
-                              return;
-                            }
-                            var entry = results.array[0]; // limit 1
-                            var status = entry[0]; // first field (status)
-                            switch ( status ) {
-                              case this.CapabilityJunctionStatus.GRANTED:
-                                view.aquire();
-                                break;
-                              default:
-                                view.reject();
-                                break;
-                            }
-                          });
-                        })
-                      })
-                    .end();
-                  spot.add(grid);
-                }
-              })
-            return spot;
-          }))
+        .start().addClass(this.myClass('container-close'))
+          .startContext({ data: this })
+            .tag(this.CANCEL, { buttonStyle: 'TERTIARY' })
+          .endContext()
         .end()
-        .startContext({ data: this })
-          .tag(this.CANCEL, { buttonStyle: 'SECONDARY' })
-        .endContext();
+        .start().addClass(this.myClass('container-title'))
+          .start('p').addClass(this.myClass('label-title')).add(this.TITLE).end()
+          .start()
+            .start('p').addClass(this.myClass('label-subtitle')).add(this.SUBTITLE_1).end()
+            .start('p').addClass(this.myClass('label-subtitle')).add(this.SUBTITLE_2).end()
+          .end()
+        .end()
+        .start().addClass(this.myClass('main-section'))
+          .start('p').addClass(this.myClass('label-cap')).add(this.LABEL_CAP_LIST).end()
+          .start(this.Rows)
+            .addClass(this.myClass('detail-container'))
+            .add(this.slot(function(data$capabilityOptions) {
+              return this.E().select(this.capabilityDAO.where(
+                self.IN(self.Capability.ID, data$capabilityOptions)
+              ), cap => {
+                return this.E().tag(self.CapabilityCardView, {
+                    data: cap
+                  })
+                  .on('click', () => {
+                    self.crunchController
+                      .createWizardSequence(cap.id).execute();
+                  });
+              });
+            }))
+          .end()
+        .end();
     },
-    function aquire() {
-      this.capabilityAcquired = true;
-      this.capabilityOptions.forEach((c) => {
-        this.capabilityCache.set(c, true);
+
+    // TODO - add feature to capture wizard close for a capability:
+
+    // First attempt:
+    //   call checkStatus() on  promise resolve of launchWizard
+    //   code:
+    //     var p = self.crunchController.launchWizard(cap.id);
+    //     p.then(() => self.checkStatus(cap));
+    // Second attempt:
+    //   add property to crunchController that changes on close,
+    //   and add a listener checkStatus(cap) that listens to property change of crunchController
+
+    // neither above works but don't want to delete this. Could be a nice feature.
+
+    // function checkStatus(cap) {
+    //   // Query UCJ status
+    //   this.crunchService.getJunction(ctrl.__subContext__, cap.id).then(ucj => {
+    //     if ( ucj && ucj.status === this.CapabilityJunctionStatus.GRANTED ) this.aquire();
+    //     else this.reject();
+    //   });
+    // },
+
+    function aquire(x) {
+      x = x || this.__subSubContext__;
+      this.data.aquired = true;
+      this.data.capabilityOptions.forEach(c => {
+        this.crunchController.capabilityCache.set(c, true);
       });
-      this.stack.back();
+      this.onClose(x);
     },
-    function reject() {
-      this.capabilityCancelled = true;
-      this.capabilityOptions.forEach((c) => {
-        this.capabilityCache.set(c, true);
+
+    function reject(x) {
+      x = x || this.__subSubContext__;
+      this.data.cancelled = true;
+      this.data.capabilityOptions.forEach(c => {
+        this.crunchController.capabilityCache.set(c, true);
       });
-      this.notify(this.REJECTED_MSG);
-      this.stack.back();
+      this.onClose(x);
     }
   ],
 
   actions: [
     {
       name: 'cancel',
-      label: 'Not interested in adding this functionality',
-      code: function() {
-        this.reject();
+      icon: 'images/ic-cancelgray.svg',
+      label: '',
+      code: function(x) {
+        this.reject(x);
       }
     }
   ]

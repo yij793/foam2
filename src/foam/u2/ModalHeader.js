@@ -27,12 +27,13 @@ foam.CLASS({
       align-items: center;
 
       width: 100%; /* This is to fit the width of its parent container */
-      padding: 16px 24px;
+      padding-top: 8px;
+      padding-bottom: 24px;
       box-sizing: border-box;
       border-bottom: solid 1px #CBCFD4;
     }
     ^title{
-      font-family: Roboto;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 18px;
       font-weight: 600;
       color: #1E1F21;
@@ -45,7 +46,6 @@ foam.CLASS({
       height: 24px;
       padding: 0 !important;
       cursor: pointer;
-      margin: 0 8px;
     }
     ^ .foam-u2-ActionView-closeModal{
       background: transparent !important;
@@ -68,7 +68,7 @@ foam.CLASS({
   actions: [
     {
       name: 'closeModal',
-      icon: 'images/ic-cancelgray.svg',
+      icon: 'images/ic-cancelblack.svg',
       label: '',
       code: function(X) {
         X.closeDialog();

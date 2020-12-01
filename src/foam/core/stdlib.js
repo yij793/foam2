@@ -649,6 +649,38 @@ foam.LIB({
         return map[val] || (map[val] = val.toString());
       };
     })(),
+    function applyFormat(string, formatString, placeholder, escapeChar) {
+      placeholder = placeholder || 'x';
+      escapeChar = escapeChar || '\\';
+      var newString = '';
+      var escaping = false;
+      var safe = true;
+      formatString.split('').forEach(chr => {
+        if ( escaping ) {
+          newString += chr;
+          escaping = false;
+          return;
+        }
+        if ( chr == escapeChar ) {
+          escaping = true;
+          return;
+        }
+        if ( chr == placeholder ) {
+          if ( string.length < 1 ) {
+            safe = false;
+            return;
+          }
+          newString += string[0];
+          string = string.slice(1);
+          return;
+        }
+        newString += chr;
+      })
+      safe = safe && string.length == 0;
+      if ( ! safe ) console.warn(
+        'performed foam.String.applyMask with unsafe inputs');
+      return newString;
+    }
   ]
 });
 
@@ -767,7 +799,11 @@ foam.LIB({
     function isInstance(o) { return o instanceof Date; },
     function is(a, b) { return a === b; },
     function clone(o) { return new Date(o); },
-    function getTime(d) { return ! d ? 0 : d.getTime ? d.getTime() : d ; },
+    function getTime(d) { 
+      // if d is null we should return null instead of 0
+      // since 0 is also the value returned when d == 1970/01/01
+      return d && d.getTime ? d.getTime() : d;
+    },
     function equals(a, b) { return this.getTime(a) === this.getTime(b); },
     function compare(a, b) {
       if ( ! foam.Date.isInstance(b) ) return 1;

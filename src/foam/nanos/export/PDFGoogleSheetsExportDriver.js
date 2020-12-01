@@ -7,12 +7,7 @@
 foam.CLASS({
   package: 'foam.nanos.export',
   name: 'PDFGoogleSheetsExportDriver',
-
-  implements: [ 'foam.nanos.export.ExportDriver' ],
-
-  requires: [
-    'foam.nanos.export.GoogleSheetsOutputter'
-  ],
+  extends: 'foam.nanos.export.GoogleSheetsBasedExportDriver',
 
   documentation: `
     Driver retrieves data, transforms it and makes calls to googleSheetsDataExport.
@@ -21,51 +16,19 @@ foam.CLASS({
     Driver makes a link for downloading pdf, returns it to user and sends request to delete the sheet.
   `,
 
-  properties: [
-    {
-      name: 'outputter',
-      factory: function() {
-        return this.GoogleSheetsOutputter.create();
-      }
-    }
-  ],
   methods: [
-    async function exportFObject(X, obj) {
-        var self = this;
-        
-        var sheetId  = '';
-        var stringArray = [];
-        var props = X.filteredTableColumns ? X.filteredTableColumns : self.outputter.getAllPropertyNames(dao.of);
-        var metadata = self.outputter.getColumnMethadata(dao.of, props);
-        stringArray.push(metadata.map(m => m.columnLabel));
-        var values = await  self.outputter.outputArray([ obj ], metadata);
-        stringArray = stringArray.concat(values);
-
-        sheetId = await X.googleSheetsDataExport.createSheet(X, stringArray, metadata);
-        if ( ! sheetId || sheetId.length == 0)
-          return '';
-        var url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?exportFormat=pdf&format=pdf&scale=3`;
-        X.googleSheetsDataExport.deleteSheet(X, sheetId);
-        return url;
+    async function exportFObject(X, obj) {      
+      var sheetId  = await this.exportFObjectAndReturnSheetId(X, obj);
+      
+      if ( ! sheetId || sheetId.length === 0)
+        return '';
+      return `https://docs.google.com/spreadsheets/d/${sheetId}/export?exportFormat=pdf&format=pdf&scale=1`;
     },
     async function exportDAO(X, dao) {
-      var self = this;
-      
-      var sink = await dao.select();
-      var sheetId  = '';
-      var stringArray = [];
-      var props = X.filteredTableColumns ? X.filteredTableColumns : self.outputter.getAllPropertyNames(dao.of);
-      var metadata = self.outputter.getColumnMethadata(dao.of, props);
-      stringArray.push(metadata.map(m => m.columnLabel));
-      var values = await self.outputter.outputArray(sink.array, metadata);
-      stringArray = stringArray.concat(values);
-
-      sheetId = await X.googleSheetsDataExport.createSheet(X, stringArray, metadata);
+      var sheetId  = await this.exportDAOAndReturnSheetId(X, dao);
       if ( ! sheetId || sheetId.length == 0)
         return '';
-      var url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?exportFormat=pdf&format=pdf&scale=3`;
-      X.googleSheetsDataExport.deleteSheet(X, sheetId);
-      return url;
+      return `https://docs.google.com/spreadsheets/d/${sheetId}/export?exportFormat=pdf&format=pdf&scale=1`;
     }
   ]
 });

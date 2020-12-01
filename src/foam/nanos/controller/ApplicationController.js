@@ -34,57 +34,64 @@ foam.CLASS({
 
   requires: [
     'foam.nanos.client.ClientBuilder',
+    'foam.nanos.controller.Memento',
+    'foam.nanos.controller.WindowHash',
     'foam.nanos.auth.Group',
     'foam.nanos.auth.User',
     'foam.nanos.auth.Subject',
+    'foam.nanos.notification.Notification',
+    'foam.nanos.notification.ToastState',
     'foam.nanos.theme.Theme',
     'foam.nanos.theme.Themes',
     'foam.nanos.theme.ThemeDomain',
     'foam.nanos.u2.navigation.TopNavigation',
     'foam.nanos.u2.navigation.FooterView',
+    'foam.nanos.crunch.CapabilityIntercept',
+    'foam.u2.crunch.CapabilityInterceptView',
     'foam.u2.crunch.CrunchController',
+    'foam.u2.borders.MarginBorder',
     'foam.u2.stack.Stack',
     'foam.u2.stack.StackView',
     'foam.u2.dialog.NotificationMessage',
     'foam.nanos.session.SessionTimer',
-    'foam.u2.dialog.Popup'
+    'foam.u2.dialog.Popup',
+    'foam.core.Latch'
   ],
 
   imports: [
     'capabilityDAO',
     'installCSS',
+    'notificationDAO',
     'sessionSuccess',
-    'window',
+    'window'
   ],
 
   exports: [
-    'displayWidth',
     'agent',
     'appConfig',
     'as ctrl',
-    'capabilityAcquired',
-    'capabilityCancelled',
+    'crunchController',
     'currentMenu',
+    'displayWidth',
     'group',
     'lastMenuLaunched',
     'lastMenuLaunchedListener',
     'loginSuccess',
-    'theme',
+    'loginVariables',
+    'mementoTail as memento',
     'menuListener',
     'notify',
     'pushMenu',
-    'requestCapability',
-    'capabilityCache',
     'requestLogin',
+    'sessionID',
+    'sessionTimer',
     'signUpEnabled',
-    'loginVariables',
     'stack',
     'subject',
+    'theme',
     'user',
     'webApp',
-    'wrapCSS as installCSS',
-    'sessionTimer',
-    'crunchController'
+    'wrapCSS as installCSS'
   ],
 
   constants: {
@@ -101,6 +108,11 @@ foam.CLASS({
       'approval3',
       'approval4',
       'approval5',
+      'secondary1',
+      'secondary2',
+      'secondary3',
+      'secondary4',
+      'secondary5',
       'warning1',
       'warning2',
       'warning3',
@@ -127,17 +139,19 @@ foam.CLASS({
   messages: [
     { name: 'GROUP_FETCH_ERR', message: 'Error fetching group' },
     { name: 'GROUP_NULL_ERR', message: 'Group was null' },
-    { name: 'LOOK_AND_FEEL_NOT_FOUND', message: 'Could not fetch look and feel object.' }
+    { name: 'LOOK_AND_FEEL_NOT_FOUND', message: 'Could not fetch look and feel object' },
+    { name: 'LANGUAGE_FETCH_ERR', message: 'Error fetching language' },
   ],
 
   css: `
     body {
-      font-family: 'Roboto', sans-serif;
+      background: /*%GREY5%*/ #f5f7fa;
+      color: #373a3c;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 14px;
       letter-spacing: 0.2px;
-      color: #373a3c;
-      background: /*%GREY5%*/ #f5f7fa;
       margin: 0;
+      overscroll-behavior: none;
     }
     .stack-wrapper {
       min-height: calc(80% - 60px);
@@ -155,6 +169,30 @@ foam.CLASS({
   `,
 
   properties: [
+    {
+      class: 'String',
+      name: 'sessionName',
+      value: 'defaultSession'
+    },
+    {
+      name: 'sessionID',
+      factory: function() {
+        var urlSession = "";
+        try {
+          urlSession = window.location.search.substring(1).split('&')
+           .find(element => element.startsWith("sessionId")).split('=')[1];
+        } catch { };
+        return urlSession !== "" ? urlSession : localStorage[this.sessionName] ||
+          ( localStorage[this.sessionName] = foam.uuid.randomGUID() );
+      }
+    },
+    {
+      name: 'memento',
+      factory: function() {
+        return this.Memento.create({tail$: this.mementoTail$});
+      }
+    },
+    'mementoTail',
     {
       name: 'loginVariables',
       expression: function(client$userDAO) {
@@ -176,11 +214,16 @@ foam.CLASS({
       name: 'clientPromise',
       factory: function() {
         var self = this;
-        return self.ClientBuilder.create().promise.then(function(cls) {
+        return self.ClientBuilder.create({}, this).promise.then(function(cls) {
           self.client = cls.create(null, self);
           return self.client;
         });
-      },
+      }
+    },
+    {
+      name: 'languageInstalled',
+      documentation: 'Latch to denote language has been installed',
+      factory: function() { return this.Latch.create(); }
     },
     {
       name: 'client',
@@ -258,13 +301,6 @@ foam.CLASS({
       }
     },
     {
-      class: 'Map',
-      name: 'capabilityCache',
-      factory: function() {
-        return new Map();
-      }
-    },
-    {
       class: 'FObjectProperty',
       of: 'foam.nanos.theme.Theme',
       name: 'theme'
@@ -283,6 +319,14 @@ foam.CLASS({
         return this.FooterView;
       }
     },
+    {
+      class: 'FObjectProperty',
+      of: 'foam.nanos.auth.Language',
+      name: 'defaultLanguage',
+      factory: function() {
+        return foam.nanos.auth.Language.create({code: 'en'})
+      }
+    },
     'currentMenu',
     'lastMenuLaunched',
     'webApp'
@@ -297,25 +341,23 @@ foam.CLASS({
 
       var self = this;
 
-      window.onpopstate = async function(event) {
-        var hid = location.hash.substr(1);
-        if ( hid ) {
-          if ( self.client ) {
-            var menu = await self.client.menuDAO.find(hid);
-            menu && menu.launch(this);
-          } else {
-            self.clientPromise.then(async () => {
-              var menu = await self.client.menuDAO.find(hid);
-              menu && menu.launch(this);
-            });
-          }
-        }
-      };
+      // Start Memento Support
+      this.WindowHash.create({value$: this.memento.value$});
+
+      this.memento.head$.sub(this.mementoChange);
+      this.mementoChange();
+      // End Memento Support
 
       this.clientPromise.then(async function(client) {
         self.setPrivate_('__subContext__', client.__subContext__);
 
+        await client.translationService.initLatch;
+        self.installLanguage();
+
         await self.fetchSubject();
+
+        await self.maybeReinstallLanguage(client)
+        self.languageInstalled.resolve();
 
         // add user and agent for backward compatibility
         Object.defineProperty(self, 'user', {
@@ -347,6 +389,23 @@ foam.CLASS({
       window.addEventListener('resize', this.updateDisplayWidth);
       this.updateDisplayWidth();
 
+
+
+//      this.__subSubContext__.notificationDAO.where(
+//        this.EQ(this.Notification.USER_ID, userNotificationQueryId)
+//      ).on.put.sub((sub, on, put, obj) => {
+//        if ( obj.toastState == this.ToastState.REQUESTED ) {
+//          this.add(this.NotificationMessage.create({
+//            message: obj.toastMessage,
+//            type: obj.severity,
+//            description: obj.toastSubMessage
+//          }));
+//          var clonedNotification = obj.clone();
+//          clonedNotification.toastState = this.ToastState.DISPLAYED;
+//          this.__subSubContext__.notificationDAO.put(clonedNotification);
+//        }
+//      });
+
       this.clientPromise.then(() => {
         this.fetchTheme().then(() => {
           this
@@ -373,13 +432,51 @@ foam.CLASS({
       });
     },
 
+    function installLanguage() {
+      var map = this.__subContext__.translationService.localeEntries;
+      for ( var key in map ) {
+        var node = global;
+        var path = key.split('.');
+
+        for ( var i = 0 ; node && i < path.length-1 ; i++ ) node = node[path[i]];
+        if ( node ) node[path[path.length-1]] = map[key];
+      }
+    },
+
+    async function maybeReinstallLanguage(client) {
+      if (
+        this.subject &&
+        this.subject.realUser &&
+        this.subject.realUser.language.toString() != foam.locale
+      ) {
+        let languages = (await client.languageDAO
+          .where(foam.mlang.predicate.Eq.create({
+            arg1: foam.nanos.auth.Language.ENABLED,
+            arg2: true
+          })).select()).array;
+
+        let userPreferLanguage = languages.find( e => e.id.compareTo(this.subject.realUser.language) === 0 )
+        if ( ! userPreferLanguage ) {
+          foam.locale = this.defaultLanguage.toString()
+          let user = this.subject.realUser
+          user.language = this.defaultLanguage.id
+          await client.userDAO.put(user)
+        } else if ( foam.locale != userPreferLanguage.toString() ) {
+          foam.locale = userPreferLanguage.toString()
+        }
+        client.translationService.maybeReload()
+        await client.translationService.initLatch
+        this.installLanguage()
+      }
+    },
+
     async function fetchGroup() {
       try {
         var group = await this.client.auth.getCurrentGroup();
         if ( group == null ) throw new Error(this.GROUP_NULL_ERR);
         this.group = group;
       } catch (err) {
-        this.notify(this.GROUP_FETCH_ERR, 'error');
+        this.notify(this.GROUP_FETCH_ERR, '', this.LogLevel.ERROR, true);
         console.error(err.message || this.GROUP_FETCH_ERR);
       }
     },
@@ -388,12 +485,12 @@ foam.CLASS({
       /** Get current user, else show login. */
       try {
         var result = await this.client.auth.getCurrentSubject(null);
-        this.loginSuccess = !! result && !! result.user;
 
-        if ( ! this.loginSuccess ) throw new Error();
+        if ( ! result || ! result.user) throw new Error();
 
         this.subject = result;
       } catch (err) {
+        this.languageInstalled.resolve();
         await this.requestLogin();
         return await this.fetchSubject();
       }
@@ -422,7 +519,7 @@ foam.CLASS({
       var M = m.toUpperCase();
 
       return css.replace(
-        new RegExp('/\\*%' + M + '%\\*/[^;]*', 'g'),
+        new RegExp('/\\*%' + M + '%\\*/[^;!]*', 'g'),
         '/*%' + M + '%*/ ' + this.theme[m]);
     },
 
@@ -450,15 +547,15 @@ foam.CLASS({
       }
     },
 
-    function pushMenu(menu) {
+    function pushMenu(menu, opt_forceReload) {
       if ( menu.id ) {
         menu.launch(this);
         menu = menu.id;
       }
-
       /** Use to load a specific menu. **/
-      if ( window.location.hash.substr(1) != menu ) {
-        window.location.hash = menu;
+      // Do it this way so as to not reset mementoTail if set
+      if ( this.memento.head != menu || opt_forceReload ) {
+        this.memento.value = menu;
       }
     },
 
@@ -482,44 +579,33 @@ foam.CLASS({
       });
     },
 
-    function requestCapability(capabilityInfo) {
-      var self = this;
-
-      capabilityInfo.capabilityOptions.forEach((c) => {
-        self.capabilityCache.set(c, false);
-      });
-
-      self.capabilityAcquired = false;
-      self.capabilityCancelled = false;
-      return new Promise(function(resolve, reject) {
-        self.stack.push({
-          class: 'foam.u2.crunch.CapabilityInterceptView',
-          capabilityOptions: capabilityInfo.capabilityOptions
-        });
-        var s1, s2;
-        s1 = self.capabilityAcquired$.sub(() => {
-          s1.detach();
-          s2.detach();
-          resolve();
-        });
-        s2 = self.capabilityCancelled$.sub(() => {
-          s1.detach();
-          s2.detach();
-          reject();
-        });
-      });
-    },
-
-    function notify(data, type) {
-      /** Convenience method to create toast notifications. */
-      this.add(this.NotificationMessage.create({
-        message: data,
-        type: type
-      }));
+    function notify(toastMessage, toastSubMessage, severity, transient) {
+      var notification = this.Notification.create();
+      notification.userId = this.subject && this.subject.realUser ?
+        this.subject.realUser.id : this.user.id;
+      notification.toastMessage = toastMessage;
+      notification.toastSubMessage = toastSubMessage;
+      notification.toastState = this.ToastState.REQUESTED;
+      notification.severity = severity;
+      notification.transient = transient;
+      this.__subContext__.notificationDAO.put(notification);
     }
   ],
 
   listeners: [
+    async function mementoChange() {
+      // TODO: make a latch instead
+      if ( this.client ) {
+        var menu = await this.client.menuDAO.find(this.memento.head);
+        menu && menu.launch(this);
+      } else {
+        this.clientPromise.then(async () => {
+          var menu = await this.client.menuDAO.find(this.memento.head);
+          menu && menu.launch(this);
+        });
+      }
+    },
+
     function onUserAgentAndGroupLoaded() {
       /**
        * Called whenever the group updates.
@@ -527,6 +613,23 @@ foam.CLASS({
        *   - Update the look and feel of the app based on the group or user
        *   - Go to a menu based on either the hash or the group
        */
+       var userNotificationQueryId = this.subject && this.subject.realUser ?
+             this.subject.realUser.id : this.user.id;
+      this.__subSubContext__.notificationDAO.where(
+        this.EQ(this.Notification.USER_ID, userNotificationQueryId)
+      ).on.put.sub((sub, on, put, obj) => {
+        if ( obj.toastState == this.ToastState.REQUESTED ) {
+          this.add(this.NotificationMessage.create({
+            message: obj.toastMessage,
+            type: obj.severity,
+            description: obj.toastSubMessage
+          }));
+          var clonedNotification = obj.clone();
+          clonedNotification.toastState = this.ToastState.DISPLAYED;
+          this.__subSubContext__.notificationDAO.put(clonedNotification);
+        }
+      });
+
       this.fetchTheme();
 
       var hash = this.window.location.hash;
@@ -537,6 +640,8 @@ foam.CLASS({
       } else if ( this.theme ) {
         this.window.location.hash = this.theme.defaultMenu;
       }
+
+//      this.__subContext__.localSettingDAO.put(foam.nanos.session.LocalSetting.create({id: 'homeDenomination', value: localStorage.getItem("homeDenomination")}));
     },
 
     function menuListener(m) {
@@ -564,7 +669,7 @@ foam.CLASS({
       try {
         this.theme = await this.Themes.create().findTheme(this);
       } catch (err) {
-        this.notify(this.LOOK_AND_FEEL_NOT_FOUND, 'error');
+        this.notify(this.LOOK_AND_FEEL_NOT_FOUND, '', this.LogLevel.ERROR, true);
         console.error(err);
         return;
       }

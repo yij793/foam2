@@ -110,7 +110,7 @@ foam.CLASS({
           {
             class: 'foam.u2.GroupingDAOList',
             rowView: { class: 'com.google.foam.demos.heroes.CitationView' },
-            groupExpr: {f: function(o) { return o.name; }}
+            groupExpr: com.google.foam.demos.u2.SampleData.NAME
           }
         ]
       },
@@ -149,6 +149,15 @@ foam.CLASS({
     {
       class: 'Int',
       name: 'defaultInt'
+    },
+    {
+      class: 'Int',
+      name: 'intWithIntView',
+      view: {
+        class: 'foam.u2.view.IntView',
+        onKey: true,
+        displayWidth: 50
+      }
     },
     {
       class: 'Int',
@@ -194,7 +203,7 @@ foam.CLASS({
       view: {
         class: 'foam.u2.MultiView',
         horizontal: false,
-        views: [ 'foam.u2.RangeView', 'foam.u2.IntView' ]
+        views: [ 'foam.u2.RangeView', { class: 'foam.u2.view.IntView', onKey: true } ]
       }
     },
     {
@@ -501,6 +510,34 @@ foam.CLASS({
           [ 'foam.nanos.menu.DAOMenu',  'DAO'     ],
           [ 'foam.nanos.menu.SubMenu',  'SubMenu' ],
           [ 'foam.nanos.menu.TabsMenu', 'Tabs'    ]
+        ]
+      }
+    },
+    {
+      class: 'FObjectProperty',
+      name: 'finalFObjectView',
+      label: 'Final FObject',
+      factory: function() { return foam.util.Timer.create(); },
+      view: {
+        class: 'foam.u2.view.FObjectView',
+        classIsFinal: true,
+        choices: [
+          [ 'foam.util.Timer', 'Timer' ],
+          [ 'foam.core.Property', 'Property' ],
+          [ 'foam.nanos.menu.DAOMenu',  'DAO'     ],
+          [ 'foam.nanos.menu.SubMenu',  'SubMenu' ],
+          [ 'foam.nanos.menu.TabsMenu', 'Tabs'    ]
+        ]
+      }
+    },
+    {
+      class: 'FObjectProperty',
+      name: 'fObjectViewWithOneChoice',
+      label: 'FObjectView With One Choice',
+      view: {
+        class: 'foam.u2.view.FObjectView',
+        choices: [
+          [ 'foam.util.Timer', 'Timer' ]
         ]
       }
     },

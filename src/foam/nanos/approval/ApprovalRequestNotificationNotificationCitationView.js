@@ -102,15 +102,21 @@ foam.CLASS({
 
       var self = this;
       this.approvalRequestDAO.find(this.data.approvalRequest).then(function(approval) {
-        self.created = approval.created.toUTCString();
-        self.classification = approval.classification;
-        self.showClassification = !! self.classification;
-        self.status = approval.status;
+        if ( approval ) {
+          self.created = approval.created.toUTCString();
+          self.classification = approval.classification;
+          self.showClassification = !! self.classification;
+          self.status = approval.status;
 
-        self.userDAO.find(approval.createdBy).then(function(user) {
-          self.userSummary = user.toSummary();
-          // self.monogram = user.monogram;
-        });
+          self.userDAO.find(approval.createdBy).then(function(user) {
+            self.userSummary = user.toSummary();
+            // self.monogram = user.monogram;
+          });
+        } else {
+          self.created = self.data.created.toUTCString();
+          self.showClassification = false;
+          self.hideStatus = true;
+        }
       });
     }
   ],
@@ -118,22 +124,23 @@ foam.CLASS({
   css: `
     ^ {
       line-height: 17px;
+      width: 100%;
     }
     ^ .userSummary {
-      font-family: IBMPlexSans;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 14px;
       font-weight: 600;
       color: #1e1f21;
       margin-left: 16px;
     }
     ^ .created {
-      font-family: IBMPlexSans;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 11px;
       color: #5e6061;
       margin-left: 16px;
     }
     ^ .classification {
-      font-family: IBMPlexSans;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       padding-left: 8px;
       padding-right: 8px;
       min-width: 84px;
@@ -149,14 +156,14 @@ foam.CLASS({
       display: inline-block;
     }
     ^ .description {
-      font-family: IBMPlexSans;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 14px;
       color: #1e1f21;
       margin-left: 32px;
       display: inline-block;
     }
     ^ .status {
-      font-family: IBMPlexSans;
+      font-family: /*%FONT1%*/ Roboto, 'Helvetica Neue', Helvetica, Arial, sans-serif;
       width: 94px;
       height: 20px;
       line-height: 20px;

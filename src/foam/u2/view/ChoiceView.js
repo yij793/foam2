@@ -22,6 +22,8 @@ foam.CLASS({
 
   implements: [ 'foam.mlang.Expressions' ],
 
+  imports: [ 'warn' ],
+
   documentation: `
     Wraps a tag that represents a singular choice. That is,
     this controller shows the user a fixed, probably small set of
@@ -103,6 +105,8 @@ foam.CLASS({
           }
         }
 
+        if ( nu.length == 1 ) this.data = nu[0][0];
+
         if ( this.dynamicSize ) this.size = Math.min(nu.length, this.maxSize);
         return nu;
       }
@@ -162,6 +166,11 @@ foam.CLASS({
       name: 'alwaysFloatLabel'
     },
     {
+      class: 'String',
+      name: 'header',
+      documentation: 'if this is set, a custom header will be add to drop down choices'
+    },
+    {
       name: 'view_'
     },
     'feedback_',
@@ -186,7 +195,8 @@ foam.CLASS({
       documentation: `The size of the select element should never be greater
         than this number.`,
       value: Number.MAX_SAFE_INTEGER
-    }
+    },
+    'prop_'
   ],
 
   methods: [
@@ -215,7 +225,8 @@ foam.CLASS({
               choices$:         self.choices$,
               placeholder$:     self.placeholder$,
               mode$:            self.mode$,
-              size$:            self.size$
+              size$:            self.size$,
+              header$:          self.header$
             })
               .attrs({ name: self.name })
               .enableClass('selection-made', self.index$.map((index) => index !== -1))
@@ -260,7 +271,9 @@ foam.CLASS({
 
     function fromProperty(p) {
       this.SUPER(p);
+      this.prop_ = p;
       this.defaultValue = p.value;
+      this.label = p.label || this.label || p.name;
     }
   ],
 
@@ -285,9 +298,20 @@ foam.CLASS({
         var of = this.dao.of
         if ( of._CHOICE_TEXT_ ) {
           this.dao.select(this.PROJECTION(of.ID, of._CHOICE_TEXT_)).then((s) => {
-            this.choices = s.array;
+            this.choices = s.projection;
           });
           return;
+        } else {
+          this.warn('Inefficient ChoiceView. Consider creating transient _choiceText_ property on ' + of.id + ' DAO, prop: ' + this.prop_);
+          /* Ex.:
+          {
+            class: 'String',
+            name: '_choiceText_',
+            transient: true,
+            javaGetter: 'return getName();',
+            getter: function() { return this.name; }
+          }
+          */
         }
         var p = this.mode === foam.u2.DisplayMode.RW ?
           this.dao.select().then(s => s.array) :

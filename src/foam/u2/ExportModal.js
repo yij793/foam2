@@ -13,7 +13,14 @@ foam.CLASS({
 
   imports: [
     'exportDriverRegistryDAO',
-    'filteredTableColumns'
+    'filteredTableColumns',
+    'serviceName'
+  ],
+
+  messages: [
+    { name: 'EXPORT', message: 'Export1' },
+    { name: 'DATA_TYPE_MSG', message: 'Data Type1' },
+    { name: 'RESPONSE', message: 'Response1' }
   ],
 
   requires: [
@@ -31,7 +38,7 @@ foam.CLASS({
           objToChoice: function(a) {
             return [a.id, a.id];
           }
-        });
+        }, X);
       },
       value: 'CSV'
     },
@@ -50,7 +57,7 @@ foam.CLASS({
     'exportObj',
     {
       name: 'exportAllColumns',
-      view: { class: 'foam.u2.CheckBox',  label: 'Export all columns '},
+      view: { class: 'foam.u2.CheckBox',  label: 'Export all columns'},
       class: 'Boolean'
     },
     'exportDriverReg',
@@ -65,7 +72,8 @@ foam.CLASS({
     {
       class: 'Boolean',
       name: 'isOpenAvailable'
-    }
+    },
+    'exportDriver'
   ],
 
   css: `
@@ -74,7 +82,7 @@ foam.CLASS({
       margin: auto;
     }
     ^ .foam-u2-tag-Select {
-      width: 125px;
+      width: 190px;
       height: 40px;
       border-radius: 0;
       margin-left: 25px;
@@ -114,36 +122,40 @@ foam.CLASS({
       self.exportDriverRegistryDAO.where(self.predicate).select().then(function(val) {
         self.exportDriverRegistryDAO.find(val.array[0].id).then(function(val) {
           self.exportDriverReg = val;
+          self.exportDriver = foam.lookup(self.exportDriverReg.driverName).create();
         });
       });
 
       self.dataType$.sub(function() {
         self.exportDriverRegistryDAO.find(self.dataType).then(function(val) {
           self.exportDriverReg = val;
+          self.exportDriver = foam.lookup(self.exportDriverReg.driverName).create();
         });
       });
-      
+
       self.exportDriverReg$.sub(function() {
         self.isConvertAvailable =  self.exportDriverReg.isConvertible;
         self.isDownloadAvailable = self.exportDriverReg.isDownloadable;
         self.isOpenAvailable = self.exportDriverReg.isOpenable;
       });
-      
 
       this
       .tag(this.ModalHeader.create({
-        title: 'Export'
+        title: this.EXPORT
       }))
       .addClass(this.myClass())
       .startContext({ data: this })
         .start()
-          .start().addClass('label').add('Data Type').end()
+          .start().addClass('label').add(this.DATA_TYPE_MSG).end()
           .start(this.DATA_TYPE).end()
-          .start().addClass('label').add('Response').end()
+          .add(this.slot(function (exportDriver) {
+            return this.E().add(exportDriver);
+          }))
+          .start().addClass('label').add(this.RESPONSE).end()
           .start(this.NOTE).addClass('input-box').addClass('note').end()
           .add(
-            self.slot(function(dataType) {
-              if ( dataType == 'CSV' || dataType == 'GoogleSheets' || dataType == 'PDFGoogleSheets' ) {
+            self.slot(function(exportDriverReg$exportAllColumns) {
+              if ( exportDriverReg$exportAllColumns ) {
                 return self.E().start().addClass('label').startContext({ data: self }).tag(self.EXPORT_ALL_COLUMNS).endContext().end();
               }
             })
@@ -161,33 +173,33 @@ foam.CLASS({
   actions: [
     {
       name: 'convert',
-      isAvailable: function(isConvertAvailable) { 
-        return isConvertAvailable; 
+      isAvailable: function(isConvertAvailable) {
+        return isConvertAvailable;
       },
       code: async function() {
         if ( ! this.exportData && ! this.exportObj ) {
           console.log('Neither exportData nor exportObj exist');
           return;
         }
-  
+
         var filteredColumnsCopy = this.filteredTableColumns;
         if ( this.exportAllColumns )
           this.filteredTableColumns = null;
-  
-        var exportDriver = foam.lookup(this.exportDriverReg.driverName).create();
-  
-        this.note = this.exportData ?
-          await exportDriver.exportDAO(this.__context__, this.exportData) :
-          await exportDriver.exportFObject(this.__context__, this.exportObj);
-  
-        if ( this.exportAllColumns )
-          this.filteredTableColumns = filteredColumnsCopy;
+
+        try {
+          this.note = this.exportData ?
+            await this.exportDriver.exportDAO(this.__context__, this.exportData) :
+            await this.exportDriver.exportFObject(this.__context__, this.exportObj);
+        } finally {
+          if ( this.exportAllColumns )
+            this.filteredTableColumns = filteredColumnsCopy;
+        }
       }
     },
     {
       name: 'download',
-      isAvailable: function(isDownloadAvailable) { 
-        return isDownloadAvailable; 
+      isAvailable: function(isDownloadAvailable) {
+        return isDownloadAvailable;
       },
       code: async function download() {
         var self = this;
@@ -195,18 +207,18 @@ foam.CLASS({
           console.log('Neither exportData nor exportObj exist');
           return;
         }
-  
+
         var filteredColumnsCopy = this.filteredTableColumns;
         if ( this.exportAllColumns )
           this.filteredTableColumns = null;
-  
-        var exportDriver    = foam.lookup(this.exportDriverReg.driverName).create();
-  
+
         var p = this.exportData ?
-          exportDriver.exportDAO(this.__context__, this.exportData) :
-          Promise.resolve(exportDriver.exportFObject(this.__context__, this.exportObj));
-  
+          Promise.resolve(this.exportDriver.exportDAO(this.__context__, this.exportData)) :
+          Promise.resolve(this.exportDriver.exportFObject(this.__context__, this.exportObj));
+
+        var exportDataResult;
         p.then(result => {
+          exportDataResult = result;
           var link = document.createElement('a');
           var href = '';
           if ( self.exportDriverReg.mimeType && self.exportDriverReg.mimeType.length != 0 ) {
@@ -215,7 +227,7 @@ foam.CLASS({
           } else {
             href = result;
           }
-          
+
           if ( href.length > 524288 ) {
             self.note = result;
             alert('Results exceed maximum download size.\nPlease cut and paste response data.');
@@ -225,31 +237,32 @@ foam.CLASS({
             document.body.appendChild(link);
             link.click();
           }
-
+        }).finally(() => {
           if ( this.exportAllColumns )
-          this.filteredTableColumns = filteredColumnsCopy;
+            this.filteredTableColumns = filteredColumnsCopy;
         });
       }
     },
     {
       name: 'open',
-      isAvailable: function(isOpenAvailable) { 
-        return isOpenAvailable; 
+      isAvailable: function(isOpenAvailable) {
+        return isOpenAvailable;
       },
       code: async function() {
-        
+
         var filteredColumnsCopy = this.filteredTableColumns;
         if ( this.exportAllColumns )
           this.filteredTableColumns = null;
 
-        var exportDriver    = foam.lookup(this.exportDriverReg.driverName).create();
-        var url = this.exportData ?
-          await exportDriver.exportDAO(this.__context__, this.exportData) :
-          await exportDriver.exportFObject(this.__context__, this.exportObj);
-        
-        if ( this.exportAllColumns )
-          this.filteredTableColumns = filteredColumnsCopy;
-
+        var url;
+        try {
+          url = this.exportData ?
+            await this.exportDriver.exportDAO(this.__context__, this.exportData) :
+            await this.exportDriver.exportFObject(this.__context__, this.exportObj);
+        } finally {
+          if ( this.exportAllColumns )
+            this.filteredTableColumns = filteredColumnsCopy;
+        }
         if ( url && url.length > 0 )
           window.location.replace(url);
       }

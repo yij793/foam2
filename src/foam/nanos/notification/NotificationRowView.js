@@ -10,16 +10,18 @@
     extends: 'foam.u2.View',
 
     requires: [
+      'foam.log.LogLevel',
       'foam.nanos.auth.User',
       'foam.nanos.notification.NotificationCitationView',
       'foam.u2.view.OverlayActionListView',
-      'foam.u2.dialog.NotificationMessage'
+      'foam.u2.dialog.Popup'
     ],
 
     imports: [
       'summaryView?',
       'invoiceDAO',
       'notificationDAO',
+      'notify',
       'stack',
       'user',
       'userDAO',
@@ -65,6 +67,10 @@
       ^ .msg.fully-visible {
         display: block;
       }
+      ^ .notificationDiv {
+        display: flex;
+        flex-direction: row;
+      }
     `,
 
     properties: [
@@ -75,21 +81,31 @@
 
     methods: [
       function initE() {
+        var self = this;
         this
           .addClass(this.myClass())
-          .tag(this.OverlayActionListView, {
-            data: [
-              this.MARK_AS_READ,
-              this.MARK_AS_UNREAD,
-              this.HIDE_NOTIFICATION_TYPE,
-              this.REMOVE_NOTIFICATION
-            ],
-            obj: this.data
-          })
-          .tag(this.NotificationCitationView, {
-            of: this.data.cls_,
-            data: this.data
-          });
+          .start().addClass('notificationDiv')
+            .on('dblclick', function() {
+              self.ctrl.add(self.Popup.create().tag({
+                class: 'foam.nanos.notification.NotificationMessageModal',
+                data: self.data
+              }));    
+            })
+            .tag(this.NotificationCitationView, {
+              of: this.data.cls_,
+              data: this.data
+            })
+            .tag(this.OverlayActionListView, {
+              data: [
+                this.MARK_AS_READ,
+                this.MARK_AS_UNREAD,
+                this.HIDE_NOTIFICATION_TYPE,
+                this.REMOVE_NOTIFICATION
+              ],
+              obj: this.data,
+              dao: this.notificationDAO
+            })
+          .end();
       }
     ],
 
@@ -114,12 +130,8 @@
       function hideNotificationType(X) {
         var self = X.rowView;
 
-        if ( self.user.disabledTopics.includes(self.data.notificationType) ){
-          self.ctrl.add(self.NotificationMessage.create({
-            message: "Disabled already exists for this notification something went wrong",
-            type: 'error'
-          }));
-
+        if ( self.user.disabledTopics.includes(self.data.notificationType) ) {
+          self.notify('Disabled already exists for this notification something went wrong.', '', self.LogLevel.ERROR, true);
           return;
         }
 
@@ -141,34 +153,14 @@
         }).catch(e => {
           self.throwError.pub(e);
 
-          // TODO: uncomment this once we wire up a proper exception
-          // if ( foam.comics.v2.userfeedback.UserFeedbackException.isInstance(e) && e.userFeedback  ){
-          //   var currentFeedback = e.userFeedback;
-          //   while ( currentFeedback ){
-          //     self.ctrl.add(self.NotificationMessage.create({
-          //       message: currentFeedback.message,
-          //       type: currentFeedback.status.name.toLowerCase()
-          //     }));
-
-          //     currentFeedback = currentFeedback.next;
-          //   }
-          // } else {
-          //   self.ctrl.add(self.NotificationMessage.create({
-          //     message: e.message,
-          //     type: 'error'
-          //   }));
-          // }
-
-          if ( e.message === 'An approval request has been sent out.' ) {
-            self.ctrl.add(self.NotificationMessage.create({
-              message: e.message,
-              type: 'success'
-            }));
+          if ( e.exception && e.exception.userFeedback  ) {
+            var currentFeedback = e.exception.userFeedback;
+            while ( currentFeedback ) {
+              this.ctrl.notify(currentFeedback.message, '', this.LogLevel.INFO, true);
+              currentFeedback = currentFeedback.next;
+            }
           } else {
-            self.ctrl.add(self.NotificationMessage.create({
-              message: e.message,
-              type: 'error'
-            }));
+            this.ctrl.notify(e.message, '', this.LogLevel.ERROR, true);
           }
         })
       },

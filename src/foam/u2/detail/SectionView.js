@@ -52,6 +52,14 @@ foam.CLASS({
       class: 'Boolean',
       name: 'showTitle',
       value: true
+    },
+    {
+      class: 'Function',
+      name: 'evaluateMessage',
+      documentation: `Evaluates model messages without executing potentially harmful values`,
+      factory: function() {
+        return (msg) => msg.replace(/\${(.*?)}/g, (x,g) => this.data[g]);
+      }
     }
   ],
 
@@ -69,6 +77,7 @@ foam.CLASS({
             .callIf(showTitle && section$title, function() {
               var slot$ = foam.Function.isInstance(self.section.title) ?
                 foam.core.ExpressionSlot.create({
+                  args: [ self.evaluateMessage$, self.data$ ],
                   obj$: self.data$,
                   code: section.title
                 }) : section.title$;
@@ -77,6 +86,7 @@ foam.CLASS({
             .callIf(section$subTitle, function() {
               var slot$ = foam.Function.isInstance(self.section.subTitle) ?
               foam.core.ExpressionSlot.create({
+                args: [ self.evaluateMessage$, self.data$ ],
                 obj$: self.data$,
                 code: section.subTitle
               }) : section.subTitle$;
@@ -84,15 +94,13 @@ foam.CLASS({
             })
             .start(self.Grid)
               .forEach(section.properties, function(p, index) {
-                var s1 = self.SimpleSlot.create();
-                var s2 = self.SimpleSlot.create();
-                this.start(self.GUnit, { columns: p.gridColumns }, s1)
+                this.start(self.GUnit, {columns: p.gridColumns})
+                  .show(p.createVisibilityFor(self.data$, self.controllerMode$).map(mode => mode !== self.DisplayMode.HIDDEN))
                   .tag(self.SectionedDetailPropertyView, {
                     prop: p,
                     data$: self.data$
-                  }, s2)
+                  })
                 .end();
-                s1.get().show(self.ProxySlot.create({ delegate$: s2.get().visibilitySlot$ }).map((mode) => mode !== self.DisplayMode.HIDDEN));
               })
             .end()
             .start(self.Cols)

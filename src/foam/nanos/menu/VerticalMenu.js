@@ -19,8 +19,7 @@ foam.CLASS({
     'menuListener',
     'loginSuccess',
     'menuDAO',
-    'pushMenu',
-    'userLoggedIn'
+    'pushMenu'
   ],
 
   requires: [
@@ -30,8 +29,8 @@ foam.CLASS({
   ],
 
   css: `
-  ^ input {
-    width: 220px;
+  ^ input[type="search"] {
+    width: 210px;
   }
 
   ^ .side-nav-view {
@@ -93,10 +92,8 @@ foam.CLASS({
   ],
 
   methods: [
-    async function initE() {
+    function initE() {
       var self = this;
-      // Wait for latest theme to get fetched
-      await this.userLoggedIn;
       this
       .addClass(this.myClass())
       .start()
@@ -118,7 +115,7 @@ foam.CLASS({
               query: self.menuSearch$,
               onClickAddOn: function(data) { self.openMenu(data); },
               selection$: self.currentMenu$,
-              formatter: function(data) { this.add(data.label); }
+              formatter: function(data) { this.add({ data : data, clsInfo : data.cls_.LABEL.name, default : data.label }); }
             })
           .end()
         .end()

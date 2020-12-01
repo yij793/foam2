@@ -85,12 +85,18 @@ foam.CLASS({
       class: 'Reference',
       of: 'foam.nanos.auth.User',
       name: 'createdByAgent'
+    },
+    {
+      class: 'Boolean',
+      name: 'isUsingNestedJournal',
+      section: 'admin'
     }
   ],
 
   methods: [
     {
       name: 'toSummary',
+      type: 'String',
       code: function() {
         var modelString = this.daoKey;
 
@@ -98,7 +104,13 @@ foam.CLASS({
         modelString = modelString.replace('DAO', '');
 
         return `(${modelString}:${this.objId}) UPDATE`;
-      }
+      },
+      javaCode: `
+        if ( foam.util.SafetyUtil.isEmpty(getDaoKey()) || getObjId() == null )
+          return "";
+        String modelString = getDaoKey().replace("local", "").replace("DAO", "");
+        return "(" + modelString + ":" + getObjId() + ") UPDATE";
+      `
     }
   ]
 });

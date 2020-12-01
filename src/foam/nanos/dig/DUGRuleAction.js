@@ -33,8 +33,8 @@ foam.CLASS({
     {
       class: 'foam.core.Enum',
       of: 'foam.nanos.http.Format',
-      name: 'format',
-    },
+      name: 'format'
+    }
   ],
 
   methods: [
@@ -44,7 +44,19 @@ foam.CLASS({
         agency.submit(x, new ContextAgent() {
           @Override
           public void execute(X x) {
-            new HTTPSink(getUrl(), getBearerToken(), getFormat()).put(obj, null);
+            HTTPSink sink = new HTTPSink(
+              getUrl(), 
+              getBearerToken(), 
+              getFormat(),
+              new foam.lib.AndPropertyPredicate(x, 
+                new foam.lib.PropertyPredicate[] {
+                  new foam.lib.ExternalPropertyPredicate(),
+                  new foam.lib.NetworkPropertyPredicate(), 
+                  new foam.lib.PermissionedPropertyPredicate()}),
+              true);
+              
+              sink.setX(x);
+              sink.put(obj, null);
           }
         }, "DUG Rule (url: " + getUrl() + " )");
       `

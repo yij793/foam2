@@ -8,21 +8,8 @@ foam.CLASS({
   name: 'CapabilityWizardlet',
   extends: 'foam.u2.wizard.BaseWizardlet',
 
-  implements: [
-    'foam.mlang.Expressions'
-  ],
-
-  imports: [
-    'user',
-    'userCapabilityJunctionDAO'
-  ],
-
   requires: [
-    'foam.core.Action',
-    'foam.core.Property',
-    'foam.layout.Section',
-    'foam.layout.SectionAxiom',
-    'foam.nanos.crunch.UserCapabilityJunction'
+    'foam.nanos.crunch.ui.UserCapabilityJunctionWAO',
   ],
 
   properties: [
@@ -31,66 +18,49 @@ foam.CLASS({
       name: 'capability'
     },
     {
-      name: 'ucj'
+      name: 'status'
+    },
+    {
+      name: 'id',
+      expression: function (capability) {
+        return 'capability,' + capability.id;
+      }
     },
 
     // Properties for WizardSection interface
     {
       name: 'of',
       class: 'Class',
-      expression: function (capability) {
+      expression: function(capability) {
+        if ( ! capability || ! capability.of ) return null;
         return capability.of;
       }
     },
     {
       name: 'data',
-      factory: function () {
-        if ( ! this.of ) return null;
-
-        var ret = this.of.create({}, this);
-        if ( this.ucj === null ) return ret;
-      
-        ret = Object.assign(ret, this.ucj.data);
-        return ret;
-      }
-    }
-  ],
-
-  methods: [
+      flags: ['web']
+    },
     {
-      name: 'save',
-      code: function() {
-        return this.updateUCJ().then(() => {
-          var ucj = this.ucj;
-          if ( ucj === null ) {
-            ucj = this.UserCapabilityJunction.create({
-              sourceId: this.user.id,
-              targetId: this.capability.id
-            })
-          }
-          if ( this.of ) ucj.data = this.data;
-          return this.userCapabilityJunctionDAO.put(ucj);
-        });
+      name: 'title',
+      class: 'String',
+      expression: function(capability) {
+        if ( ! capability || ! capability.name ) return '';
+        return capability.name;
       }
     },
     {
-      // This can be moved to an expression on the 'data' property
-      // iff property expressions unwrap promises.
-      name: 'updateUCJ',
-      async: true,
-      code: function () {
-        return this.userCapabilityJunctionDAO.find(
-          this.AND(
-            this.EQ(
-              this.UserCapabilityJunction.SOURCE_ID,
-              this.user.id),
-            this.EQ(
-              this.UserCapabilityJunction.TARGET_ID,
-              this.capability.id))
-        ).then(ucj => {
-          this.ucj = ucj;
-          return this;
-        });
+      name: 'isAvailable',
+      class: 'Boolean',
+      value: true,
+      postSet: function (ol, nu) {
+        if ( nu ) this.save();
+        else this.cancel();
+      }
+    },
+    {
+      name: 'dataController',
+      factory: function () {
+        return this.UserCapabilityJunctionWAO.create({}, this.__context__);
       }
     }
   ]

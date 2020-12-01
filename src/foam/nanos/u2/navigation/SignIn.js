@@ -13,11 +13,16 @@ foam.CLASS({
 
   imports: [
     'auth',
+    'ctrl',
     'loginSuccess',
-    'notify',
     'stack',
     'user',
     'menuDAO'
+  ],
+
+  requires: [
+    'foam.log.LogLevel',
+    'foam.u2.dialog.NotificationMessage'
   ],
 
   messages: [
@@ -25,8 +30,8 @@ foam.CLASS({
     { name: 'FOOTER_TXT', message: 'Not a user yet?' },
     { name: 'FOOTER_LINK', message: 'Create an account' },
     { name: 'SUB_FOOTER_LINK', message: 'Forgot password?' },
-    { name: 'ERROR_MSG', message: 'There was an issue with logging in.' },
-    { name: 'ERROR_MSG2', message: 'Please enter email' }
+    { name: 'ERROR_MSG', message: 'There was an issue logging in' },
+    { name: 'ERROR_MSG2', message: 'Please enter email or username' }
   ],
 
   properties: [
@@ -38,8 +43,7 @@ foam.CLASS({
       class: 'String',
       name: 'identifier',
       required: true,
-      // TODO: rename label to 'Email or Username' when integrating
-      label: 'Email',
+      label: 'Email or Username',
       view: {
         class: 'foam.u2.TextField',
         focused: true
@@ -117,16 +121,19 @@ foam.CLASS({
       code: async function(X) {
         if ( this.identifier.length > 0 ) {
           this.auth.login(X, this.identifier, this.password).then(
-            (logedInUser) => {
+            logedInUser => {
               if ( ! logedInUser ) return;
               if ( this.token_ ) {
                 logedInUser.signUpToken = this.token_;
                 this.dao_.put(logedInUser)
-                  .then((updatedUser) => {
+                  .then(updatedUser => {
                     this.user.copyFrom(updatedUser);
                     this.nextStep();
-                  }).catch((err) => {
-                    this.notify(err.message || this.ERROR_MSG, 'error');
+                  }).catch(err => {
+                    this.ctrl.add(this.NotificationMessage.create({
+                      message: err.message || this.ERROR_MSG,
+                      type: this.LogLevel.ERROR
+                    }));
                   });
               } else {
                 this.user.copyFrom(logedInUser);
@@ -134,12 +141,17 @@ foam.CLASS({
               }
             }
           ).catch(
-            (err) => {
-              this.notify(err.message || this.ERROR_MSG, 'error');
+            err => {
+              this.ctrl.add(this.NotificationMessage.create({
+                message: err.message || this.ERROR_MSG,
+                type: this.LogLevel.ERROR
+              }));
           });
         } else {
-          // TODO: change to 'Please enter email or username' when integrating
-          this.notify(this.ERROR_MSG2, 'error');
+          this.ctrl.add(this.NotificationMessage.create({
+            message: this.ERROR_MSG2,
+            type: this.LogLevel.ERROR
+          }));
         }
       }
     }

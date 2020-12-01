@@ -98,6 +98,7 @@ public class PreventPrivilegeEscalationTest
       .setEmail("ppet@example.com")
       .setGroup(groupId)
       .setSpid("spid")
+      .setLifecycleState(foam.nanos.auth.LifecycleState.ACTIVE)
       .build();
     testUser = (User) bareUserDAO.put(testUser);
     return Auth.sudo(x, testUser);
@@ -190,7 +191,7 @@ public class PreventPrivilegeEscalationTest
       test(false, "Users cannot set the parent of a group to a group containing a permission that isn't implied by one they already have.");
 
     } catch (AuthorizationException e) {
-      test(e.getMessage().equals("Permission denied. You cannot change the parent of a group if doing so grants that group permissions that you do not have."), "Users cannot set the parent of a group to a group containing a permission that isn't implied by one they already have.");
+      test(e.getMessage().equals("Permission denied. You cannot change the parent of a group."), "Users cannot set the parent of a group to a group containing a permission that isn't implied by one they already have.");
     } finally {
       cleanUp(x);
     }
@@ -259,7 +260,7 @@ public class PreventPrivilegeEscalationTest
       test(false, "Users cannot update the parent of a group to a group containing a permission that isn't implied by one they already have.");
 
     } catch (AuthorizationException e) {
-      test(e.getMessage().equals("Permission denied. You cannot change the parent of a group if doing so grants that group permissions that you do not have."), "Users cannot set the parent of a group to a group containing a permission that isn't implied by one they already have.");
+      test(e.getMessage().equals("Permission denied. You cannot change the parent of a group."), "Users cannot set the parent of a group to a group containing a permission that isn't implied by one they already have.");
     } finally {
       cleanUp(x);
     }
